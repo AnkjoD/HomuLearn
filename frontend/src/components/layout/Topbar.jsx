@@ -5,6 +5,8 @@ import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
 import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
 import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded';
+import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
+import { logout } from '../../store/authSlice';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import { toggleTheme, setSidebarOpen } from '../../store/uiSlice';
 import { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED } from './Sidebar';
@@ -12,6 +14,7 @@ import { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED } from './Sidebar';
 export default function Topbar() {
   const dispatch = useDispatch();
   const { themeMode, sidebarOpen } = useSelector((s) => s.ui);
+  const user = useSelector((s) => s.auth.user);
 
   return (
     <AppBar
@@ -63,12 +66,18 @@ export default function Topbar() {
           </IconButton>
         </Tooltip>
 
-        <Tooltip title="Nguyễn Nam">
-          <Avatar
-            sx={{ width: 32, height: 32, bgcolor: 'secondary.main', fontSize: 13, cursor: 'pointer',
-                  color: 'secondary.contrastText' }}
-          >NN</Avatar>
-        </Tooltip>
+        {user && (
+          <>
+            <Tooltip title={user.fullName}>
+              <Avatar sx={{ width: 32, height: 32 }}>{user.fullName?.slice(0, 1)}</Avatar>
+            </Tooltip>
+            <Tooltip title="Đăng xuất">
+              <IconButton aria-label="Đăng xuất" onClick={() => dispatch(logout())} size="small">
+                <LogoutRoundedIcon />
+              </IconButton>
+            </Tooltip>
+          </>
+        )}
       </Toolbar>
     </AppBar>
   );

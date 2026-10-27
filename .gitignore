@@ -1,17 +1,39 @@
-# Bỏ qua các thư mục không muốn đẩy lên Git
+/docs/
+
+# Tài liệu AI cũ và công cụ local
 .agents/
 .agent/
-admin/
-backend/
 
-# Bỏ qua các file script lẻ nãy giờ tạo
-*.mjs
-*.js
-*.sql
+# Secrets và credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets/
 
-# Gitignore tiêu chuẩn cho frontend (để không đẩy file nặng)
-frontend/node_modules/
-frontend/dist/
-frontend/.env
-frontend/.env.local
+# Dependencies và cache
+**/node_modules/
+**/.gradle/
+
+# Build, test, runtime
+**/dist/
+**/build/
+**/target/
+**/coverage/
+**/playwright-report/
+**/test-results/
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+
+# IDE và OS
+.vscode/
+.idea/
 .DS_Store
+Thumbs.db
