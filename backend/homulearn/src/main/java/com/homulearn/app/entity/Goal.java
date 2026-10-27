@@ -19,6 +19,14 @@ public class Goal {
     private String title;
     private Integer currentProgress = 0;
     private Integer targetValue;
+    private String unit;
     private LocalDateTime deadline;
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    // tính toán động, không lưu DB — đồng bộ với CHECK constraint V3
+    @Transient
+    public String getStatus() {
+        return (currentProgress != null && targetValue != null && currentProgress >= targetValue)
+                ? "DONE" : "IN_PROGRESS";
+    }
 }

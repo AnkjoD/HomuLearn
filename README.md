@@ -11,13 +11,13 @@ remain prototypes.
 
 Requirements: Node.js/npm, JDK 21 and PostgreSQL. The Gradle wrapper is included.
 
-Create an empty development database and provide its connection settings through
-environment variables. Do not commit passwords or environment files.
+Create an empty development database. Copy `backend/homulearn/.env.example` to
+`backend/homulearn/.env` and set its database connection values once. Spring Boot
+loads this local file when started from `backend/homulearn`; use `KEY=value`
+without shell-style quotes. The `.env` file is ignored by Git and is not packaged
+in the application JAR. Do not commit passwords or environment files.
 
 ```powershell
-$env:DB_URL = 'jdbc:postgresql://localhost:5432/homulearn_dev'
-$env:DB_USER = '<your database user>'
-$env:DB_PASSWORD = '<your database password>'
 cd backend/homulearn
 .\gradlew.bat bootRun
 ```
@@ -43,6 +43,8 @@ review of the frontend/backend origin configuration.
 
 Use a dedicated PostgreSQL database ending in `_test` and set `DB_URL`, `DB_USER`
 and `DB_PASSWORD` for that database before running integration or browser tests.
+Process environment variables override the local `.env`, so test runners can
+select their isolated database without changing the development file.
 Do not use a development or production database for these commands.
 
 ```powershell

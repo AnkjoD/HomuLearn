@@ -1,25 +1,42 @@
 package com.homulearn.app.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "posts")
-@Data
+@Getter
+@Setter
+@NoArgsConstructor
 public class Post {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    @Column(nullable = false)
     private String title;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
 
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
+    public Post(User user, String title, String content) {
+        this.user = user;
+        this.title = title;
+        this.content = content;
+        this.createdAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
+    }
 }

@@ -18,4 +18,6 @@ public class PomodoroSession {
 
     private Integer durationMinutes;
     private LocalDateTime completedAt = LocalDateTime.now();
+    private String idempotencyKey;
+    private LocalDateTime startedAt;
 }

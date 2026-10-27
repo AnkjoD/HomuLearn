@@ -1,101 +1,420 @@
-import React from 'react';
-import { Box, Typography, Grid, Card, CardContent, LinearProgress, Chip, Avatar } from '@mui/material';
-import LocalFireDepartmentRoundedIcon from '@mui/icons-material/LocalFireDepartmentRounded';
-
-// ponytail: mock — thay bằng gamification API
-const BADGES = [
-  { id: 'b1', icon: '🔥', label: 'Streak 7 ngày',    earned: true,  color: '#FDB813' },
-  { id: 'b2', icon: '📚', label: '50 ghi chú',        earned: true,  color: '#0F4C81' },
-  { id: 'b3', icon: '🏆', label: 'Quiz 100%',         earned: false, color: '#16A34A' },
-  { id: 'b4', icon: '⚡', label: 'Streak 30 ngày',    earned: false, color: '#DC2626' },
-  { id: 'b5', icon: '🌟', label: '10 ngày liên tiếp', earned: true,  color: '#0284C7' },
-  { id: 'b6', icon: '🤝', label: 'Chia sẻ 5 note',    earned: false, color: '#7C3AED' },
-];
-
-const GOALS = [
-  { id: 'g1', label: 'Hoàn thành Giải tích',   progress: 68, target: '30/06',   color: '#0F4C81' },
-  { id: 'g2', label: 'Ôn 200 flashcard/tháng', progress: 55, target: '200 thẻ', color: '#FDB813' },
-  { id: 'g3', label: 'Duy trì streak 30 ngày', progress: 40, target: '30 ngày', color: '#16A34A' },
-];
-
-const STREAK_DAYS = [true, true, true, false, true, true, true, true, true, false, true, true, true, true];
+import { useGoals } from "../hooks/useGoals";
+import React, { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  Box,
+  Typography,
+  Grid,
+  Card,
+  CardContent,
+  LinearProgress,
+  Chip,
+  Avatar,
+  Button,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Alert,
+  CircularProgress,
+  Tooltip,
+} from "@mui/material";
+import LocalFireDepartmentRoundedIcon from "@mui/icons-material/LocalFireDepartmentRounded";
+import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import {
+  loadGoals,
+  addGoal,
+  editGoal,
+  removeGoal,
+  clearGoalError,
+} from "../store/goalsSlice";
 
 export default function Goals() {
+  const dispatch = useDispatch();
+  const { items: goals, status, error, mutationError, mutationStatus } = useGoals();
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState(null);
+  const [form, setForm] = useState({
+    title: "",
+    unit: "",
+    targetValue: 10,
+    currentProgress: 0,
+    deadline: "",
+  });
+
+
+  const handleOpenCreate = () => {
+    setEditingGoal(null);
+    setForm({
+      title: "",
+      unit: "thẻ",
+      targetValue: 10,
+      currentProgress: 0,
+      deadline: "",
+    });
+    dispatch(clearGoalError());
+    setDialogOpen(true);
+  };
+
+  const handleOpenEdit = (goal) => {
+    setEditingGoal(goal);
+    setForm({
+      title: goal.title,
+      unit: goal.unit || "",
+      targetValue: goal.targetValue,
+      currentProgress: goal.currentProgress,
+      deadline: goal.deadline ? new Date(new Date(goal.deadline).getTime() - new Date(goal.deadline).getTimezoneOffset() * 60000).toISOString().slice(0, 10) : "",
+    });
+    dispatch(clearGoalError());
+    setDialogOpen(true);
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    const payload = {
+      title: form.title.trim(),
+      unit: form.unit.trim() || null,
+      targetValue: Number(form.targetValue),
+      currentProgress: Number(form.currentProgress),
+      clearDeadline: !form.deadline,
+      deadline: form.deadline ? new Date(`${form.deadline}T00:00:00`).toISOString() : null,
+    };
+
+    if (editingGoal) {
+      const res = await dispatch(
+        editGoal({ id: editingGoal.id, data: payload })
+      );
+      if (!res.error) setDialogOpen(false);
+    } else {
+      const res = await dispatch(addGoal(payload));
+      if (!res.error) setDialogOpen(false);
+    }
+  };
+
+  const handleDelete = (id) => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa mục tiêu này?")) {
+      dispatch(removeGoal(id));
+    }
+  };
+
+  const handleQuickIncrement = (goal) => {
+    const nextVal = Math.min(goal.targetValue, goal.currentProgress + 1);
+    dispatch(
+      editGoal({
+        id: goal.id,
+        data: { currentProgress: nextVal },
+      })
+    );
+  };
+
   return (
     <Box>
-      <Typography variant="h4" fontWeight={700} mb={3}>Mục tiêu & Thành tích</Typography>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 2,
+          mb: 3,
+        }}
+      >
+        <Typography variant="h4" fontWeight={700}>
+          Mục tiêu & Thành tích
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<AddRoundedIcon />}
+          onClick={handleOpenCreate}
+        >
+          Mục tiêu mới
+        </Button>
+      </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      {mutationError && !dialogOpen && <Alert severity="error">{typeof mutationError === "string" ? mutationError : mutationError.message}</Alert>}
+      {status === "failed" && <Button onClick={() => dispatch(loadGoals())}>Thử lại</Button>}
       <Grid container spacing={3}>
-        {/* Streak */}
+        {/* Streak card */}
         <Grid item xs={12} md={4}>
-          <Card sx={{ borderRadius: '14px', border: '1px solid', borderColor: 'divider' }} elevation={0}>
-            <CardContent sx={{ p: '24px !important' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
-                <Box sx={{ width: 48, height: 48, borderRadius: 2, bgcolor: '#FDB81318', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <LocalFireDepartmentRoundedIcon sx={{ color: '#FDB813', fontSize: 28 }} />
-                </Box>
-                <Box>
-                  <Typography variant="h4" fontWeight={700} color="#FDB813" sx={{ lineHeight: 1.1 }}>12</Typography>
-                  <Typography variant="caption" color="text.secondary" fontWeight={500}>ngày streak</Typography>
-                </Box>
-              </Box>
-              <Typography variant="body2" fontWeight={600} mb={1.5}>Lịch sử 14 ngày qua</Typography>
-              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                {STREAK_DAYS.map((active, i) => (
-                  <Box key={i} sx={{ width: 26, height: 26, borderRadius: '8px', bgcolor: active ? '#FDB813' : 'background.subtle', border: '1px solid', borderColor: active ? '#FDB813' : 'divider', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Typography variant="caption" sx={{ fontSize: 9, color: active ? '#fff' : 'text.disabled', fontWeight: 700 }}>{i + 5}</Typography>
-                  </Box>
-                ))}
-              </Box>
-            </CardContent>
+          <Card
+            sx={{
+              borderRadius: "14px",
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+            elevation={0}
+          >
+            <CardContent><Typography variant="h6">Chuỗi ngày học</Typography><Typography color="text.secondary">Chưa có dữ liệu. Tính năng streak chưa triển khai.</Typography></CardContent>
           </Card>
         </Grid>
 
-        {/* Goals */}
+        {/* Goals list */}
         <Grid item xs={12} md={8}>
-          <Card sx={{ borderRadius: '14px', border: '1px solid', borderColor: 'divider', height: '100%' }} elevation={0}>
-            <CardContent sx={{ p: '24px !important' }}>
-              <Typography variant="h6" fontWeight={700} mb={3}>Mục tiêu học tập</Typography>
-              {GOALS.map(goal => (
-                <Box key={goal.id} mb={3} sx={{ '&:last-child': { mb: 0 } }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, alignItems: 'center' }}>
-                    <Typography variant="body2" fontWeight={600}>{goal.label}</Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Chip label={goal.target} size="small" variant="outlined" sx={{ height: 20, fontSize: 11, fontWeight: 500 }} />
-                      <Typography variant="caption" color="text.secondary" fontWeight={600}>{goal.progress}%</Typography>
-                    </Box>
-                  </Box>
-                  <LinearProgress variant="determinate" value={goal.progress}
-                    sx={{ height: 8, borderRadius: 4, bgcolor: goal.color + '22', '& .MuiLinearProgress-bar': { bgcolor: goal.color, borderRadius: 4 } }} />
+          <Card
+            sx={{
+              borderRadius: "14px",
+              border: "1px solid",
+              borderColor: "divider",
+              height: "100%",
+            }}
+            elevation={0}
+          >
+            <CardContent sx={{ p: "24px !important" }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  mb: 3,
+                }}
+              >
+                <Typography variant="h6" fontWeight={700}>
+                  Mục tiêu học tập ({goals.length})
+                </Typography>
+                {status === "loading" && <CircularProgress size={20} />}
+              </Box>
+
+              {status !== "loading" && goals.length === 0 && (
+                <Box sx={{ py: 6, textAlign: "center" }}>
+                  <Typography color="text.secondary" mb={2}>
+                    Chưa có mục tiêu nào. Hãy đặt mục tiêu đầu tiên của bạn!
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    startIcon={<AddRoundedIcon />}
+                    onClick={handleOpenCreate}
+                  >
+                    Tạo mục tiêu
+                  </Button>
                 </Box>
-              ))}
+              )}
+
+              {goals.map((goal) => {
+                const percent = Math.min(
+                  100,
+                  Math.round((goal.currentProgress / (goal.targetValue || 1)) * 100)
+                );
+                const isCompleted = goal.status === "DONE" || percent >= 100;
+                const progressColor = isCompleted ? "#16A34A" : "#0F4C81";
+
+                return (
+                  <Box key={goal.id} mb={3} sx={{ "&:last-child": { mb: 0 } }}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: 1.5,
+                        mb: 1,
+                        alignItems: "center",
+                      }}
+                    >
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Typography variant="body2" fontWeight={600}>
+                          {goal.title}
+                        </Typography>
+                        {isCompleted && (
+                          <Chip
+                            icon={<CheckCircleRoundedIcon fontSize="small" />}
+                            label="Hoàn thành"
+                            size="small"
+                            color="success"
+                            variant="outlined"
+                            sx={{ height: 22, fontSize: 11 }}
+                          />
+                        )}
+                      </Box>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Chip
+                          label={`${goal.currentProgress}/${goal.targetValue} ${
+                            goal.unit || ""
+                          }`.trim()}
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 22, fontSize: 11, fontWeight: 500 }}
+                        />
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          fontWeight={600}
+                        >
+                          {percent}%
+                        </Typography>
+                        <Tooltip title="Cộng thêm 1">
+                          <IconButton
+                            size="small"
+                            aria-label="Cộng thêm 1"
+                            disabled={isCompleted || mutationStatus === "loading"}
+                            onClick={() => handleQuickIncrement(goal)}
+                            color="primary"
+                          >
+                            <AddRoundedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Sửa mục tiêu">
+                          <IconButton
+                            size="small"
+                            aria-label="Sửa mục tiêu"
+                            disabled={mutationStatus === "loading"}
+                            onClick={() => handleOpenEdit(goal)}
+                          >
+                            <EditRoundedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Xóa mục tiêu">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            aria-label="Xóa mục tiêu"
+                            disabled={mutationStatus === "loading"}
+                            onClick={() => handleDelete(goal.id)}
+                          >
+                            <DeleteOutlineRoundedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </Box>
+                    <LinearProgress
+                      variant="determinate"
+                      value={percent}
+                      sx={{
+                        height: 8,
+                        borderRadius: 4,
+                        bgcolor: progressColor + "22",
+                        "& .MuiLinearProgress-bar": {
+                          bgcolor: progressColor,
+                          borderRadius: 4,
+                        },
+                      }}
+                    />
+                    {goal.deadline && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ mt: 0.5, display: "block" }}
+                      >
+                        Hạn chót:{" "}
+                        {new Date(goal.deadline).toLocaleDateString("vi-VN")}
+                      </Typography>
+                    )}
+                  </Box>
+                );
+              })}
             </CardContent>
           </Card>
         </Grid>
 
-        {/* Badges */}
+        {/* Badges card */}
         <Grid item xs={12}>
-          <Card sx={{ borderRadius: '14px', border: '1px solid', borderColor: 'divider' }} elevation={0}>
-            <CardContent sx={{ p: '24px !important' }}>
-              <Typography variant="h6" fontWeight={700} mb={3}>Huy hiệu</Typography>
-              <Grid container spacing={2}>
-                {BADGES.map(badge => (
-                  <Grid item xs={6} sm={4} md={2} key={badge.id}>
-                    <Box sx={{ textAlign: 'center', opacity: badge.earned ? 1 : 0.4, transition: 'transform 0.2s', '&:hover': { transform: badge.earned ? 'scale(1.05)' : 'none' } }}>
-                      <Avatar sx={{ width: 64, height: 64, mx: 'auto', mb: 1.5, bgcolor: badge.color + (badge.earned ? '18' : '00'), fontSize: 32, border: badge.earned ? '2px solid' : '2px dashed', borderColor: badge.earned ? badge.color : 'divider' }}>
-                        {badge.icon}
-                      </Avatar>
-                      <Typography variant="caption" color={badge.earned ? 'text.primary' : 'text.disabled'} fontWeight={badge.earned ? 600 : 500} display="block">
-                        {badge.label}
-                      </Typography>
-                      {badge.earned && <Chip label="Đạt được" size="small" sx={{ mt: 0.5, height: 18, fontSize: 9, bgcolor: '#16A34A18', color: '#16A34A', fontWeight: 700 }} />}
-                    </Box>
-                  </Grid>
-                ))}
-              </Grid>
-            </CardContent>
+          <Card
+            sx={{
+              borderRadius: "14px",
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+            elevation={0}
+          >
+            <CardContent><Typography variant="h6">Huy hiệu</Typography><Typography color="text.secondary">Chưa có dữ liệu. Tính năng huy hiệu chưa triển khai.</Typography></CardContent>
           </Card>
         </Grid>
       </Grid>
+
+      {/* Dialog tạo / chỉnh sửa mục tiêu */}
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <form onSubmit={handleSave}>
+          <DialogTitle>
+            {editingGoal ? "Chỉnh sửa mục tiêu" : "Mục tiêu học tập mới"}
+          </DialogTitle>
+          <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "16px !important" }}>
+            {mutationError && (
+              <Alert severity="error">
+                {typeof mutationError === "string"
+                  ? mutationError
+                  : mutationError.message || "Thao tác thất bại"}
+              </Alert>
+            )}
+            <TextField
+              label="Tiêu đề mục tiêu"
+              required
+              fullWidth
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              placeholder="VD: Hoàn thành Giải tích"
+            />
+            <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <TextField
+                  label="Chỉ tiêu"
+                  type="number"
+                  required
+                  fullWidth
+                  inputProps={{ min: 1 }}
+                  value={form.targetValue}
+                  onChange={(e) =>
+                    setForm({ ...form, targetValue: Math.max(1, Number(e.target.value)) })
+                  }
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField
+                  label="Đơn vị"
+                  fullWidth
+                  value={form.unit}
+                  onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                  placeholder="thẻ, giờ, bài..."
+                />
+              </Grid>
+            </Grid>
+            <TextField
+              label="Tiến độ hiện tại"
+              type="number"
+              fullWidth
+              inputProps={{ min: 0, max: form.targetValue }}
+              value={form.currentProgress}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  currentProgress: Math.max(
+                    0,
+                    Math.min(form.targetValue, Number(e.target.value))
+                  ),
+                })
+              }
+            />
+            <TextField
+              label="Hạn chót"
+              type="date"
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+              value={form.deadline}
+              onChange={(e) => setForm({ ...form, deadline: e.target.value })}
+            />
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button onClick={() => setDialogOpen(false)}>Hủy</Button>
+            <Button type="submit" variant="contained" disabled={mutationStatus === "loading" || !form.title.trim()}>
+              Lưu
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
     </Box>
   );
 }
