@@ -4,6 +4,8 @@
  * Dùng Vitest + Redux Toolkit configureStore thật.
  * Không test async thunks trực tiếp ở đây (cần mock fetch);
  * chỉ test reducer transitions qua dispatch action creators.
+ *
+ * Bổ sung lượt này: restoreSession pending/fulfilled/rejected (các ca chưa có).
  */
 import { describe, it, expect } from "vitest";
 import { configureStore } from "@reduxjs/toolkit";
@@ -12,11 +14,14 @@ import authReducer, {
   login,
   logout,
   register,
+  restoreSession,
 } from "../store/authSlice";
 
 function makeStore() {
   return configureStore({ reducer: { auth: authReducer } });
 }
+
+// ── Các test gốc (giữ nguyên) ────────────────────────────────────────────────
 
 describe("authSlice reducer", () => {
   it("initial state đúng", () => {
@@ -95,3 +100,71 @@ describe("authSlice reducer", () => {
     expect(store.getState().auth.user).toBeNull();
   });
 });
+
+// ── restoreSession reducer transitions (bổ sung) ─────────────────────────────
+
+describe("restoreSession reducer transitions", () => {
+  it("pending → restoring=true", () => {
+    // Giả lập store đã qua restore (restoring=false), sau đó trigger lại
+    const store = configureStore({
+      reducer: { auth: authReducer },
+      preloadedState: { auth: { user: null, restoring: false, status: "idle", error: null } },
+    });
+    store.dispatch(restoreSession.pending("id", undefined));
+    expect(store.getState().auth.restoring).toBe(true);
+  });
+
+  it("fulfilled với user → user set, restoring=false", () => {
+    const store = makeStore();
+    const user = { id: "u1", email: "a@test.com", fullName: "Alice", role: "STUDENT" };
+    store.dispatch(restoreSession.fulfilled(user, "id", undefined));
+    const s = store.getState().auth;
+    expect(s.user).toEqual(user);
+    expect(s.restoring).toBe(false);
+  });
+
+  it("fulfilled với null (401 bị catch trong thunk) → user=null, restoring=false", () => {
+    // Path bình thường khi chưa đăng nhập: fetchMe throw 401, thunk catch → return null
+    const store = makeStore();
+    store.dispatch(restoreSession.fulfilled(null, "id", undefined));
+    const s = store.getState().auth;
+    expect(s.user).toBeNull();
+    expect(s.restoring).toBe(false);
+  });
+
+  it("rejected → user=null, restoring=false (regression: spinner không treo vĩnh viễn)", () => {
+    // Hiện tại thunk không thể reject (try/catch bắt hết). Test này là regression guard
+    // nếu implementation thay đổi và bỏ catch — spinner sẽ treo mãi nếu restoring không reset.
+    const store = makeStore();
+    store.dispatch(restoreSession.rejected(new Error("unexpected"), "id", undefined));
+    const s = store.getState().auth;
+    expect(s.user).toBeNull();
+    expect(s.restoring).toBe(false);
+  });
+
+  it("fulfilled không thay đổi status — restoreSession không phải login", () => {
+    // status chỉ dùng cho login/register/logout; restoreSession không đụng status field
+    const store = makeStore();
+    const user = { id: "u1", email: "a@test.com", fullName: "Alice", role: "STUDENT" };
+    store.dispatch(restoreSession.fulfilled(user, "id", undefined));
+    expect(store.getState().auth.status).toBe("idle");
+  });
+});
+
+/*
+ * BLOCKER — ProtectedRoute render test:
+ *
+ * Cần @testing-library/react và @testing-library/jest-dom trong devDependencies
+ * để render ProtectedRoute với <Provider> + <MemoryRouter> và assert DOM.
+ *
+ * Hành vi cần kiểm tra (chưa có test tự động):
+ *   1. restoring=true → render <CircularProgress> (role="progressbar"), không redirect, không render children
+ *   2. restoring=false, user=null → Navigate to="/login" được render
+ *   3. restoring=false, user có giá trị → render children
+ *   4. restoring=true dù user có giá trị → vẫn spinner (tránh render protected content sớm)
+ *
+ * Yêu cầu Reviewer thêm vào frontend/package.json devDependencies:
+ *   "@testing-library/react": "^16.x"
+ *   "@testing-library/jest-dom": "^6.x"
+ * Sau đó TestEngineer viết frontend/src/test/protectedRoute.test.jsx.
+ */

@@ -2,7 +2,10 @@
 
 React/Vite frontend and Java 21/Spring Boot API with PostgreSQL.
 The current slice supports account registration, session login/logout, CSRF
-protection and protected frontend routes. Other learning screens remain prototypes.
+protection and protected frontend routes. Notes CRUD now uses the API and
+PostgreSQL with per-account ownership checks. Its UI currently loads the first
+50 notes and searches that loaded list; folders/pinning and other learning screens
+remain prototypes.
 
 ## Local development
 

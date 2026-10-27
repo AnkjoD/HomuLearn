@@ -1,188 +1,437 @@
-import React, { useState, useRef, useEffect } from 'react';
+/**
+ * NoteDetail.jsx
+ *
+ * Hiển thị chi tiết một ghi chú từ API theo :id trong URL.
+ * Giữ nguyên layout 2 cột (nội dung + AI chat) từ thiết kế cũ.
+ * AI chat vẫn là mock local (ngoài MVP) — không thay đổi.
+ *
+ * Luồng dữ liệu:
+ *   useParams → loadNote(id) → notesSlice.current → render
+ *   editNote(id, data) → cập nhật current + items trong slice
+ *
+ * Edge cases:
+ *   - 404: hiện Alert + nút Quay lại
+ *   - 401: ProtectedRoute đã chặn trước, không cần xử lý thêm
+ *   - Loading: CircularProgress toàn trang
+ */
+import React, { useState, useRef, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { useSelector, useDispatch } from "react-redux";
 import {
-  Box, Typography, Paper, TextField, IconButton, Chip,
-  Divider, List, ListItem, Avatar, CircularProgress,
-} from '@mui/material';
-import SendRoundedIcon from '@mui/icons-material/SendRounded';
-import SmartToyRoundedIcon from '@mui/icons-material/SmartToyRounded';
-import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
-import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
+  Box,
+  Typography,
+  Paper,
+  TextField,
+  IconButton,
+  Chip,
+  Divider,
+  List,
+  ListItem,
+  Avatar,
+  CircularProgress,
+  Alert,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+} from "@mui/material";
+import SendRoundedIcon from "@mui/icons-material/SendRounded";
+import SmartToyRoundedIcon from "@mui/icons-material/SmartToyRounded";
+import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
+import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
+import SaveRoundedIcon from "@mui/icons-material/SaveRounded";
+import { loadNote, editNote, clearCurrent, clearMutationError } from "../store/notesSlice";
 
-// ponytail: mock note content — thay bằng API fetch theo sessionId
-const MOCK_NOTE = {
-  id: 's1',
-  title: 'Giới hạn hàm số',
-  subject: 'Giải tích',
-  youtubeId: 'dQw4w9WgXcQ', // placeholder
-  sections: [
-    {
-      heading: '1. Định nghĩa giới hạn',
-      timestamp: 120,
-      content: `Giới hạn của hàm số f(x) khi x tiến tới a là L, ký hiệu:\n\n**lim(x→a) f(x) = L**\n\nNghĩa là: với mọi ε > 0, tồn tại δ > 0 sao cho nếu 0 < |x − a| < δ thì |f(x) − L| < ε.`,
-    },
-    {
-      heading: '2. Các quy tắc tính giới hạn',
-      timestamp: 480,
-      content: `- **Giới hạn tổng**: lim(f+g) = lim f + lim g\n- **Giới hạn tích**: lim(f·g) = lim f · lim g\n- **Giới hạn thương**: lim(f/g) = lim f / lim g (lim g ≠ 0)\n- **Giới hạn kẹp (Squeeze theorem)**: nếu g(x) ≤ f(x) ≤ h(x) và lim g = lim h = L thì lim f = L`,
-    },
-    {
-      heading: '3. Giới hạn một phía',
-      timestamp: 900,
-      content: `- **Giới hạn phải**: lim(x→a⁺) f(x) — x tiến tới a từ bên phải\n- **Giới hạn trái**: lim(x→a⁻) f(x) — x tiến tới a từ bên trái\n\nHàm có giới hạn tại a khi và chỉ khi giới hạn trái = giới hạn phải.`,
-    },
-    {
-      heading: '4. Giới hạn đặc biệt quan trọng',
-      timestamp: 1380,
-      content: `- lim(x→0) sin(x)/x = **1**\n- lim(x→∞) (1 + 1/x)ˣ = **e**\n- lim(x→0) (eˣ − 1)/x = **1**`,
-    },
-  ],
-};
-
-// ponytail: mock AI responses — thay bằng streaming API call
+// ---------------------------------------------------------------------------
+// AI Chat — mock local, ngoài MVP
+// ponytail: khi có AI endpoint thật, thay getAIResponse bằng fetch
+// ---------------------------------------------------------------------------
 const AI_RESPONSES = {
-  default: 'Câu hỏi hay! Dựa trên ghi chú về giới hạn hàm số, tôi có thể giải thích thêm. Hãy đặt câu hỏi cụ thể hơn để tôi trả lời chính xác nhé.',
-  'epsilon': 'ε (epsilon) trong định nghĩa giới hạn đại diện cho "sai số đầu ra" — khoảng cách tối đa từ f(x) đến L. δ (delta) là "sai số đầu vào" — khoảng cách tối đa từ x đến a. Định nghĩa nói: với sai số đầu ra ε bất kỳ, ta luôn tìm được δ phù hợp.',
-  'squeeze': 'Định lý kẹp (Squeeze Theorem) hoạt động như sau: nếu ta biết g(x) ≤ f(x) ≤ h(x) và cả g, h đều tiến tới L, thì f bị "kẹp" giữa và cũng phải tiến tới L. Ví dụ điển hình: chứng minh lim(x→0) x²sin(1/x) = 0.',
+  default:
+    "Câu hỏi hay! Hãy đặt câu hỏi cụ thể hơn về nội dung ghi chú để tôi trả lời chính xác nhé.",
 };
 
 function getAIResponse(msg) {
-  const lower = msg.toLowerCase();
-  if (lower.includes('epsilon') || lower.includes('delta') || lower.includes('ε') || lower.includes('δ')) return AI_RESPONSES['epsilon'];
-  if (lower.includes('kẹp') || lower.includes('squeeze')) return AI_RESPONSES['squeeze'];
-  return AI_RESPONSES['default'];
+  return AI_RESPONSES["default"];
 }
 
 function ChatMessage({ msg }) {
-  const isUser = msg.role === 'user';
+  const isUser = msg.role === "user";
   return (
-    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', flexDirection: isUser ? 'row-reverse' : 'row', mb: 2 }}>
-      <Avatar sx={{ width: 28, height: 28, bgcolor: isUser ? 'primary.main' : 'secondary.main', fontSize: 14, flexShrink: 0 }}>
-        {isUser ? <PersonRoundedIcon sx={{ fontSize: 16 }} /> : <SmartToyRoundedIcon sx={{ fontSize: 16 }} />}
+    <Box
+      sx={{
+        display: "flex",
+        gap: 1,
+        alignItems: "flex-start",
+        flexDirection: isUser ? "row-reverse" : "row",
+        mb: 2,
+      }}
+    >
+      <Avatar
+        sx={{
+          width: 28,
+          height: 28,
+          bgcolor: isUser ? "primary.main" : "secondary.main",
+          fontSize: 14,
+          flexShrink: 0,
+        }}
+      >
+        {isUser ? (
+          <PersonRoundedIcon sx={{ fontSize: 16 }} />
+        ) : (
+          <SmartToyRoundedIcon sx={{ fontSize: 16 }} />
+        )}
       </Avatar>
       <Paper
         variant="outlined"
         sx={{
-          p: 1.5, maxWidth: '80%',
-          bgcolor: isUser ? '#0F4C81' : '#F1F5F9',
-          color: isUser ? '#FFFFFF' : '#0F172A',
-          border: 'none',
-          borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+          p: 1.5,
+          maxWidth: "80%",
+          bgcolor: isUser ? "primary.main" : "background.subtle",
+          color: isUser ? "primary.contrastText" : "text.primary",
+          border: "none",
+          borderRadius: isUser ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+          boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
         }}
       >
-        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{msg.content}</Typography>
+        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+          {msg.content}
+        </Typography>
       </Paper>
     </Box>
   );
 }
 
+// ---------------------------------------------------------------------------
+// NoteDetail
+// ---------------------------------------------------------------------------
 export default function NoteDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+
+  const { current: note, currentStatus, currentError, mutationStatus, mutationError } =
+    useSelector((s) => s.notes);
+
+  // AI chat — local state
   const [messages, setMessages] = useState([
-    { role: 'ai', content: 'Xin chào! Tôi là AI assistant cho ghi chú này. Hỏi tôi bất cứ điều gì về "Giới hạn hàm số" nhé!' },
+    {
+      role: "ai",
+      content: "Xin chào! Tôi là AI assistant. Hỏi tôi về nội dung ghi chú này nhé!",
+    },
   ]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [activeTimestamp, setActiveTimestamp] = useState(null);
+  const [input, setInput] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
   const chatBottomRef = useRef(null);
 
+  // Edit dialog state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editDraft, setEditDraft] = useState({ title: "", content: "" });
+  const [editTitleError, setEditTitleError] = useState("");
+
+  const isSaving = mutationStatus === "saving";
+
+  // Load note khi mount hoặc id thay đổi
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    dispatch(loadNote(id));
+    return () => {
+      dispatch(clearCurrent());
+    };
+  }, [dispatch, id]);
+
+  // Scroll chat xuống cuối khi có tin mới
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Xóa lỗi mutation khi đóng dialog edit
+  useEffect(() => {
+    if (!editOpen) {
+      dispatch(clearMutationError());
+      setEditTitleError("");
+    }
+  }, [editOpen, dispatch]);
+
+  // Mở dialog edit với dữ liệu hiện tại
+  const openEdit = () => {
+    if (!note) return;
+    setEditDraft({ title: note.title, content: note.content || "" });
+    setEditOpen(true);
+  };
+
+  // Lưu chỉnh sửa qua API
+  const handleSaveEdit = async () => {
+    if (!editDraft.title.trim()) {
+      setEditTitleError("Tiêu đề không được để trống");
+      return;
+    }
+    setEditTitleError("");
+    const result = await dispatch(
+      editNote({
+        id,
+        data: {
+          title: editDraft.title.trim(),
+          content: editDraft.content,
+        },
+      })
+    );
+    if (editNote.fulfilled.match(result)) {
+      setEditOpen(false);
+    }
+  };
+
+  // AI chat send
   const sendMessage = () => {
-    if (!input.trim() || loading) return;
-    const userMsg = { role: 'user', content: input };
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
-    setLoading(true);
-    // ponytail: simulated delay — thay bằng fetch('/api/chat')
+    if (!input.trim() || aiLoading) return;
+    const userMsg = { role: "user", content: input };
+    setMessages((prev) => [...prev, userMsg]);
+    setInput("");
+    setAiLoading(true);
     setTimeout(() => {
-      setMessages(prev => [...prev, { role: 'ai', content: getAIResponse(userMsg.content) }]);
-      setLoading(false);
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", content: getAIResponse(userMsg.content) },
+      ]);
+      setAiLoading(false);
     }, 1000);
   };
 
-  const formatTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  // ---------------------------------------------------------------------------
+  // Render states
+  // ---------------------------------------------------------------------------
+
+  if (currentStatus === "loading" || currentStatus === "idle") {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", py: 12 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (currentStatus === "failed") {
+    const is404 = currentError?.status === 404;
+    return (
+      <Box sx={{ py: 4 }}>
+        <Alert severity={is404 ? "warning" : "error"} sx={{ mb: 2 }}>
+          {is404
+            ? "Ghi chú không tồn tại hoặc bạn không có quyền truy cập."
+            : currentError?.message || "Không tải được ghi chú"}
+        </Alert>
+        <Button
+          startIcon={<ArrowBackRoundedIcon />}
+          onClick={() => navigate("/notes")}
+        >
+          Quay lại danh sách
+        </Button>
+      </Box>
+    );
+  }
+
+  if (!note) return null;
 
   return (
-    <Box sx={{ display: 'flex', height: 'calc(100vh - 128px)', gap: 2 }}>
-      {/* LEFT: Note content */}
-      <Box sx={{ flex: 1, overflowY: 'auto', pr: 1 }}>
-        <Paper variant="outlined" sx={{ mb: 2, borderRadius: 2, overflow: 'hidden', aspectRatio: '16/9' }}>
-          <iframe
-            width="100%" height="100%"
-            src={`https://www.youtube.com/embed/${MOCK_NOTE.youtubeId}${activeTimestamp ? `?start=${activeTimestamp}` : ''}`}
-            title={MOCK_NOTE.title}
-            frameBorder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen style={{ display: 'block' }}
-          />
-        </Paper>
-
-        <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-          <Chip label={MOCK_NOTE.subject} size="small" color="primary" variant="outlined" />
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: { xs: "column", lg: "row" },
+        height: { lg: "calc(100vh - 128px)" },
+        gap: 2,
+      }}
+    >
+      {/* ==================== Nội dung ghi chú ==================== */}
+      <Box sx={{ flex: 1, overflowY: "auto", pr: 1 }}>
+        {/* Back + Edit */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+          <Button
+            size="small"
+            startIcon={<ArrowBackRoundedIcon />}
+            onClick={() => navigate("/notes")}
+          >
+            Danh sách
+          </Button>
+          <Box sx={{ flex: 1 }} />
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<EditRoundedIcon />}
+            onClick={openEdit}
+          >
+            Chỉnh sửa
+          </Button>
         </Box>
-        <Typography variant="h4" fontWeight={700} mb={3}>{MOCK_NOTE.title}</Typography>
 
-        {MOCK_NOTE.sections.map((sec) => (
-          <Box key={sec.heading} mb={3}>
-            <Box
-              onClick={() => setActiveTimestamp(sec.timestamp)}
-              sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, cursor: 'pointer',
-                '&:hover .ts-chip': { opacity: 1 } }}
-            >
-              <Typography variant="h5" fontWeight={600}>{sec.heading}</Typography>
-              <Chip
-                className="ts-chip"
-                icon={<AccessTimeRoundedIcon />}
-                label={formatTime(sec.timestamp)}
-                size="small" variant="outlined" color="primary"
-                sx={{ opacity: 0.4, transition: 'opacity 0.2s' }}
-              />
-            </Box>
-            <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>
-              {sec.content}
+        {/* Metadata */}
+        <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+          <Chip
+            label={
+              note.updatedAt
+                ? `Cập nhật ${new Date(note.updatedAt).toLocaleDateString("vi-VN")}`
+                : "—"
+            }
+            size="small"
+            variant="outlined"
+          />
+        </Box>
+
+        <Typography variant="h4" fontWeight={700} mb={3}>
+          {note.title}
+        </Typography>
+
+        <Divider sx={{ mb: 3 }} />
+
+        <Typography
+          variant="body1"
+          sx={{ whiteSpace: "pre-wrap", lineHeight: 1.8 }}
+        >
+          {note.content || (
+            <Typography color="text.secondary" fontStyle="italic">
+              Ghi chú này chưa có nội dung.
             </Typography>
-            <Divider sx={{ mt: 3 }} />
-          </Box>
-        ))}
+          )}
+        </Typography>
       </Box>
 
-      {/* RIGHT: Chatbot panel */}
-      <Paper variant="outlined"
-        sx={{ width: 360, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRadius: 2, overflow: 'hidden' }}
+      {/* ==================== AI Chat (mock) ==================== */}
+      <Paper
+        variant="outlined"
+        sx={{
+          width: { xs: "100%", lg: 360 },
+          minHeight: 420,
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "column",
+          borderRadius: 2,
+          overflow: "hidden",
+        }}
       >
-        <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box
+          sx={{
+            p: 2,
+            borderBottom: "1px solid",
+            borderColor: "divider",
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+          }}
+        >
           <SmartToyRoundedIcon color="secondary" />
-          <Typography variant="h6" fontWeight={600}>AI Hỏi & Đáp</Typography>
-          <Chip label={MOCK_NOTE.title} size="small" sx={{ ml: 'auto', maxWidth: 130 }} />
+          <Typography variant="h6" fontWeight={600}>
+            AI Hỏi &amp; Đáp
+          </Typography>
+          <Chip
+            label={note.title}
+            size="small"
+            sx={{ ml: "auto", maxWidth: 130 }}
+          />
         </Box>
 
-        <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
-          {messages.map((msg, i) => <ChatMessage key={i} msg={msg} />)}
-          {loading && (
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+        <Box sx={{ flex: 1, overflowY: "auto", p: 2 }}>
+          {messages.map((msg, i) => (
+            <ChatMessage key={i} msg={msg} />
+          ))}
+          {aiLoading && (
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
               <CircularProgress size={14} />
-              <Typography variant="caption" color="text.secondary">AI đang suy nghĩ…</Typography>
+              <Typography variant="caption" color="text.secondary">
+                AI đang suy nghĩ…
+              </Typography>
             </Box>
           )}
           <div ref={chatBottomRef} />
         </Box>
 
-        <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider', display: 'flex', gap: 1 }}>
+        <Box
+          sx={{
+            p: 1.5,
+            borderTop: "1px solid",
+            borderColor: "divider",
+            display: "flex",
+            gap: 1,
+          }}
+        >
           <TextField
-            fullWidth multiline maxRows={3} size="small"
+            fullWidth
+            multiline
+            maxRows={3}
+            size="small"
             placeholder="Hỏi về ghi chú này… (Enter gửi)"
             value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
           />
-          <IconButton color="primary" onClick={sendMessage} disabled={!input.trim() || loading}>
+          <IconButton
+            color="primary"
+            onClick={sendMessage}
+            disabled={!input.trim() || aiLoading}
+          >
             <SendRoundedIcon />
           </IconButton>
         </Box>
       </Paper>
+
+      {/* ==================== Dialog: Chỉnh sửa ghi chú ==================== */}
+      <Dialog
+        open={editOpen}
+        onClose={() => !isSaving && setEditOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle fontWeight={700}>Chỉnh sửa ghi chú</DialogTitle>
+        <DialogContent
+          sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "8px !important" }}
+        >
+          {mutationError && (
+            <Alert severity="error">
+              {mutationError.fieldErrors?.title || mutationError.message}
+            </Alert>
+          )}
+          <TextField
+            label="Tiêu đề"
+            fullWidth
+            required
+            value={editDraft.title}
+            onChange={(e) => {
+              setEditDraft((d) => ({ ...d, title: e.target.value }));
+              if (e.target.value.trim()) setEditTitleError("");
+            }}
+            error={!!editTitleError}
+            helperText={editTitleError}
+            inputProps={{ maxLength: 255 }}
+          />
+          <TextField
+            label="Nội dung"
+            fullWidth
+            multiline
+            rows={8}
+            value={editDraft.content}
+            onChange={(e) =>
+              setEditDraft((d) => ({ ...d, content: e.target.value }))
+            }
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditOpen(false)} disabled={isSaving}>
+            Huỷ
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSaveEdit}
+            disabled={isSaving || !editDraft.title.trim()}
+            startIcon={
+              isSaving ? <CircularProgress size={14} /> : <SaveRoundedIcon />
+            }
+          >
+            {isSaving ? "Đang lưu…" : "Lưu"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
-
