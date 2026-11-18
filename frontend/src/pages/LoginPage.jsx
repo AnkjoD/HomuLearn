@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch } from "react-redux";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
   Box,
@@ -11,7 +11,7 @@ import {
   Alert,
   CircularProgress,
 } from "@mui/material";
-import { login, clearError } from "../store/authSlice";
+import { login } from "../store/authSlice";
 
 // Validation client-side đơn giản — server vẫn validate lại
 function validate(email, password) {
@@ -27,33 +27,48 @@ export default function LoginPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
-  const { status, error } = useSelector((s) => s.auth);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fieldErrs, setFieldErrs] = useState({});
-
-  const loading = status === "loading";
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [showRegisteredNotice, setShowRegisteredNotice] = useState(
+    Boolean(location.state?.registered)
+  );
 
   function handleChange(setter) {
     return (e) => {
       setter(e.target.value);
-      // Xóa lỗi server khi user bắt đầu sửa
-      if (error) dispatch(clearError());
+      // Xóa lỗi form khi user bắt đầu sửa
+      if (error) setError(null);
     };
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
+    setShowRegisteredNotice(false);
     const errs = validate(email, password);
     if (Object.keys(errs).length) {
       setFieldErrs(errs);
       return;
     }
     setFieldErrs({});
-    const result = await dispatch(login({ email, password }));
-    if (login.fulfilled.match(result)) {
-      navigate("/", { replace: true });
+    setError(null);
+    setLoading(true);
+    try {
+      const result = await dispatch(login({ email, password }));
+      if (login.fulfilled.match(result)) {
+        navigate("/", { replace: true });
+      } else {
+        setError(
+          typeof result.payload === "string"
+            ? result.payload
+            : "Đăng nhập thất bại"
+        );
+      }
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -77,7 +92,7 @@ export default function LoginPage() {
             Không gian học tập HomuLearn
           </Typography>
 
-          {location.state?.registered && !error && (
+          {showRegisteredNotice && !error && (
             <Alert severity="success" sx={{ mb: 2 }}>Đã tạo tài khoản. Vui lòng đăng nhập.</Alert>
           )}
           {error && typeof error === "string" && (

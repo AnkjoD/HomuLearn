@@ -120,3 +120,35 @@ export async function updateNote(id, data) {
 export async function deleteNote(id) {
   await mutation(`${BASE}/${id}`, { method: "DELETE" });
 }
+
+const FOLDERS_BASE = "/api/v1/note-folders";
+
+/** fetchFolders — GET /api/v1/note-folders */
+export async function fetchFolders() {
+  const res = await fetch(FOLDERS_BASE, { credentials: "include" });
+  if (!res.ok) throw await parseError(res);
+  return res.json();
+}
+
+/** createFolder — POST /api/v1/note-folders */
+export async function createFolder(data) {
+  const res = await mutation(FOLDERS_BASE, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+/** updateFolder — PATCH /api/v1/note-folders/:id */
+export async function updateFolder(id, data) {
+  const res = await mutation(`${FOLDERS_BASE}/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+/** deleteFolder — DELETE /api/v1/note-folders/:id */
+export async function deleteFolder(id) {
+  await mutation(`${FOLDERS_BASE}/${id}`, { method: "DELETE" });
+}

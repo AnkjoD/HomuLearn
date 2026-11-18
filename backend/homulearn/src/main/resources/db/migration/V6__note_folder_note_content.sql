@@ -1,0 +1,2 @@
+ALTER TABLE note_folders
+    ADD COLUMN IF NOT EXISTS note_content VARCHAR(500) NOT NULL DEFAULT '';

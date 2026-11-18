@@ -1,18 +1,22 @@
-import { createSlice } from '@reduxjs/toolkit';
+import { createSlice } from "@reduxjs/toolkit";
 
-// Lưu preference vào localStorage
-const saved = localStorage.getItem('themeMode');
+function readThemePreference() {
+  try {
+    return localStorage.getItem("themeMode") === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
 
 const uiSlice = createSlice({
-  name: 'ui',
+  name: "ui",
   initialState: {
-    themeMode: saved === 'dark' ? 'dark' : 'light',   // 'light' | 'dark'
-    sidebarOpen: true,
+    themeMode: readThemePreference(),
+    sidebarOpen: typeof window !== "undefined" && window.innerWidth >= 900,
   },
   reducers: {
     toggleTheme(state) {
-      state.themeMode = state.themeMode === 'light' ? 'dark' : 'light';
-      localStorage.setItem('themeMode', state.themeMode);
+      state.themeMode = state.themeMode === "light" ? "dark" : "light";
     },
     setSidebarOpen(state, action) {
       state.sidebarOpen = action.payload;

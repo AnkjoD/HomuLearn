@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch } from "react-redux";
 import { useNavigate, Link } from "react-router-dom";
 import {
   Box,
@@ -11,15 +11,21 @@ import {
   Alert,
   CircularProgress,
 } from "@mui/material";
-import { register, clearError } from "../store/authSlice";
+import { register } from "../store/authSlice";
 
-function validate(fullName, email, password) {
+function validate(fullName, email, password, rewritePassword) {
   const errs = {};
-  if (!fullName || fullName.trim().length < 2) errs.fullName = "Họ tên tối thiểu 2 ký tự";
+  if (!fullName || fullName.trim().length < 2)
+    errs.fullName = "Họ tên tối thiểu 2 ký tự";
   if (!email) errs.email = "Vui lòng nhập email";
-  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = "Email không hợp lệ";
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    errs.email = "Email không hợp lệ";
   if (!password) errs.password = "Vui lòng nhập mật khẩu";
-  else if (password.length < 12 || password.length > 128) errs.password = "Mật khẩu từ 12 đến 128 ký tự";
+  else if (password.length < 12 || password.length > 128)
+    errs.password = "Mật khẩu từ 12 đến 128 ký tự";
+  if (!rewritePassword) errs.rewritePassword = "Vui lòng nhập lại mật khẩu";
+  else if (password !== rewritePassword)
+    errs.rewritePassword = "Mật khẩu không khớp";
   return errs;
 }
 
@@ -32,45 +38,52 @@ function serverToFieldErrs(err) {
 export default function RegisterPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { status, error } = useSelector((s) => s.auth);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fieldErrs, setFieldErrs] = useState({});
-
-  const loading = status === "loading";
-
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [rewritePassword, setRewritePassword] = useState("");
   // Lỗi chung (không phải fieldErrors) — ví dụ 409 email trùng
   const globalError =
-    error && typeof error === "object" && !Object.keys(error.fieldErrors || {}).length
+    error &&
+    typeof error === "object" &&
+    !Object.keys(error.fieldErrors || {}).length
       ? error.message
       : typeof error === "string"
-      ? error
-      : null;
+        ? error
+        : null;
 
   function handleChange(setter) {
     return (e) => {
       setter(e.target.value);
-      if (error) dispatch(clearError());
+      if (error) setError(null);
     };
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    const errs = validate(fullName, email, password);
+    const errs = validate(fullName, email, password, rewritePassword);
     if (Object.keys(errs).length) {
       setFieldErrs(errs);
       return;
     }
     setFieldErrs({});
-    const result = await dispatch(register({ email, password, fullName }));
-    if (register.fulfilled.match(result)) {
-      navigate("/login", { replace: true, state: { registered: true } });
-    } else {
-      // Hiện fieldErrors từ server nếu có
-      const sErrs = serverToFieldErrs(result.payload);
-      if (Object.keys(sErrs).length) setFieldErrs(sErrs);
+    setError(null);
+    setLoading(true);
+    try {
+      const result = await dispatch(register({ email, password, fullName }));
+      if (register.fulfilled.match(result)) {
+        navigate("/login", { replace: true, state: { registered: true } });
+      } else {
+        setError(result.payload || "Đăng ký thất bại");
+        const sErrs = serverToFieldErrs(result.payload);
+        if (Object.keys(sErrs).length) setFieldErrs(sErrs);
+      }
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -139,12 +152,27 @@ export default function RegisterPage() {
               disabled={loading}
               autoComplete="new-password"
             />
+            <TextField
+              label="Nhập lại mật khẩu"
+              type="password"
+              value={rewritePassword}
+              onChange={handleChange(setRewritePassword)}
+              error={!!fieldErrs.rewritePassword}
+              helperText={fieldErrs.rewritePassword}
+              fullWidth
+              size="small"
+              sx={{ mb: 3 }}
+              disabled={loading}
+              autoComplete="new-password"
+            />
             <Button
               type="submit"
               variant="contained"
               fullWidth
               disabled={loading}
-              startIcon={loading ? <CircularProgress size={16} color="inherit" /> : null}
+              startIcon={
+                loading ? <CircularProgress size={16} color="inherit" /> : null
+              }
             >
               {loading ? "Đang đăng ký…" : "Đăng ký"}
             </Button>
@@ -152,7 +180,14 @@ export default function RegisterPage() {
 
           <Typography variant="body2" mt={2} textAlign="center">
             Đã có tài khoản?{" "}
-            <Link to="/login" style={{ textDecoration: "none", color: "inherit", fontWeight: 600 }}>
+            <Link
+              to="/login"
+              style={{
+                textDecoration: "none",
+                color: "inherit",
+                fontWeight: 600,
+              }}
+            >
               Đăng nhập
             </Link>
           </Typography>

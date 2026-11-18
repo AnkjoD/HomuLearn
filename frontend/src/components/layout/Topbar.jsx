@@ -1,82 +1,174 @@
-import React from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { AppBar, Toolbar, IconButton, Box, Tooltip, InputBase, Avatar, Badge } from '@mui/material';
-import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
-import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
-import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
-import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded';
-import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
-import { logout } from '../../store/authSlice';
-import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
-import { toggleTheme, setSidebarOpen } from '../../store/uiSlice';
-import { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED } from './Sidebar';
+import React from "react";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  AppBar,
+  Toolbar,
+  IconButton,
+  Box,
+  Tooltip,
+  Typography,
+  Button,
+  Avatar,
+} from "@mui/material";
+import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
+import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
+import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
+import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
+import { useLocation, useNavigate } from "react-router-dom";
+import { toggleTheme, setSidebarOpen } from "../../store/uiSlice";
+import { logout } from "../../store/authSlice";
+import { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED } from "./Sidebar";
+
+const pageTitles = {
+  notes: "Ghi chú",
+  review: "Ôn tập",
+  calendar: "Lịch & Công việc",
+  pomodoro: "Pomodoro",
+  groups: "Nhóm học",
+  community: "Cộng đồng",
+  chatbot: "Trợ giảng AI",
+  goals: "Mục tiêu",
+  profile: "Hồ sơ cá nhân",
+  admin: "Quản trị",
+};
+
+// Avatar initials từ fullName
+function initials(name) {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+}
 
 export default function Topbar() {
   const dispatch = useDispatch();
-  const { themeMode, sidebarOpen } = useSelector((s) => s.ui);
+  const navigate = useNavigate();
+  const { themeMode, sidebarOpen } = useSelector((state) => state.ui);
   const user = useSelector((s) => s.auth.user);
+  const location = useLocation();
+  const pageTitle = pageTitles[location.pathname.split("/")[1]] || "Tổng quan";
+  const sidebarWidth = sidebarOpen ? SIDEBAR_WIDTH : SIDEBAR_COLLAPSED;
+  const isDark = themeMode === "dark";
+
+  function handleLogout() {
+    dispatch(logout());
+    // navigate("/login") không cần — ProtectedRoute tự redirect khi user=null
+  }
 
   return (
     <AppBar
       position="fixed"
       elevation={0}
       sx={{
-        bgcolor: 'background.paper',
-        borderBottom: '1px solid',
-        borderColor: 'divider',
-        color: 'text.primary',
-        ml: `${sidebarOpen ? SIDEBAR_WIDTH : SIDEBAR_COLLAPSED}px`,
-        width: `calc(100% - ${sidebarOpen ? SIDEBAR_WIDTH : SIDEBAR_COLLAPSED}px)`,
-        transition: 'margin 0.2s, width 0.2s',
-        zIndex: (theme) => theme.zIndex.drawer - 1,
+        bgcolor: "background.paper",
+        color: "text.primary",
+        borderBottom: "1px solid",
+        borderColor: "divider",
+        ml: { xs: 0, md: `${sidebarWidth}px` },
+        width: { xs: "100%", md: `calc(100% - ${sidebarWidth}px)` },
+        transition: "width 200ms, margin 200ms",
       }}
     >
-      <Toolbar sx={{ minHeight: '64px !important', gap: 1 }}>
-        <IconButton onClick={() => dispatch(setSidebarOpen(!sidebarOpen))} size="small">
-          <MenuRoundedIcon />
-        </IconButton>
-
-        {/* Search bar */}
-        <Box
-          sx={{
-            flex: 1, maxWidth: 480,
-            display: 'flex', alignItems: 'center', gap: 1,
-            bgcolor: 'background.default', border: '1px solid', borderColor: 'divider',
-            borderRadius: '10px', px: 1.5, height: 36,
-            '&:focus-within': { borderColor: 'primary.main', boxShadow: '0 0 0 3px rgba(15,76,129,0.12)' },
-          }}
+      <Toolbar
+        sx={{
+          minHeight: "76px !important",
+          gap: 1.5,
+          px: { xs: 2, md: "32px !important" },
+        }}
+      >
+        <Tooltip title="Đóng / mở thanh điều hướng">
+          <IconButton
+            aria-label="Đóng hoặc mở thanh điều hướng"
+            onClick={() => dispatch(setSidebarOpen(!sidebarOpen))}
+          >
+            <MenuRoundedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ display: { xs: "none", sm: "block" } }}
         >
-          <SearchRoundedIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
-          <InputBase placeholder="Tìm kiếm ghi chú, nhóm, bài viết…" sx={{ flex: 1, fontSize: 14 }} />
-        </Box>
-
+          Không gian học tập{" "}
+          <Box component="span" sx={{ mx: 1.5, color: "divider" }}>
+            /
+          </Box>
+          <Box component="span" sx={{ color: "text.primary", fontWeight: 600 }}>
+            {pageTitle}
+          </Box>
+        </Typography>
         <Box sx={{ flex: 1 }} />
 
-        <Tooltip title={themeMode === 'dark' ? 'Chuyển sáng' : 'Chuyển tối'}>
-          <IconButton onClick={() => dispatch(toggleTheme())} size="small">
-            {themeMode === 'dark' ? <LightModeRoundedIcon /> : <DarkModeRoundedIcon />}
-          </IconButton>
-        </Tooltip>
-
-        <Tooltip title="Thông báo">
-          <IconButton size="small">
-            <Badge badgeContent={3} color="error" sx={{ '& .MuiBadge-badge': { fontSize: 10, minWidth: 16, height: 16 } }}>
-              <NotificationsNoneRoundedIcon />
-            </Badge>
-          </IconButton>
-        </Tooltip>
-
+        {/* Tên user + avatar */}
         {user && (
-          <>
-            <Tooltip title={user.fullName}>
-              <Avatar sx={{ width: 32, height: 32 }}>{user.fullName?.slice(0, 1)}</Avatar>
-            </Tooltip>
-            <Tooltip title="Đăng xuất">
-              <IconButton aria-label="Đăng xuất" onClick={() => dispatch(logout())} size="small">
-                <LogoutRoundedIcon />
-              </IconButton>
-            </Tooltip>
-          </>
+          <Tooltip title="Xem & sửa hồ sơ cá nhân">
+            <Box
+              onClick={() => navigate("/profile")}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                cursor: "pointer",
+                px: 1,
+                py: 0.5,
+                borderRadius: 2,
+                "&:hover": { bgcolor: "action.hover" },
+              }}
+            >
+              <Avatar
+                sx={{
+                  width: 30,
+                  height: 30,
+                  fontSize: 13,
+                  bgcolor: user.avatarColor || "primary.main",
+                }}
+              >
+                {initials(user.fullName)}
+              </Avatar>
+              <Typography
+                variant="body2"
+                fontWeight={600}
+                sx={{ display: { xs: "none", md: "block" }, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              >
+                {user.fullName}
+              </Typography>
+            </Box>
+          </Tooltip>
+        )}
+
+        <Tooltip
+          title={
+            isDark
+              ? "Chuyển sang Madoka · chế độ sáng"
+              : "Chuyển sang Homura · chế độ tối"
+          }
+        >
+          <Button
+            aria-label={
+              isDark ? "Bật chế độ sáng Madoka" : "Bật chế độ tối Homura"
+            }
+            onClick={() => dispatch(toggleTheme())}
+            variant="outlined"
+            size="small"
+            startIcon={
+              isDark ? <DarkModeRoundedIcon /> : <LightModeRoundedIcon />
+            }
+            sx={{ borderRadius: 8, px: 1.8 }}
+          >
+            {isDark ? "Homura" : "Madoka"}
+          </Button>
+        </Tooltip>
+
+        {/* Nút đăng xuất */}
+        {user && (
+          <Tooltip title="Đăng xuất">
+            <IconButton aria-label="Đăng xuất" onClick={handleLogout} size="small">
+              <LogoutRoundedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         )}
       </Toolbar>
     </AppBar>

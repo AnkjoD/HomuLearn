@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
-import { ThemeProvider, CssBaseline } from "@mui/material";
+import { ThemeProvider, CssBaseline, Alert } from "@mui/material";
 import { useDispatch, useSelector } from "react-redux";
 import { lightTheme, darkTheme } from "./theme/index";
 import AppLayout from "./components/layout/AppLayout";
@@ -16,7 +16,8 @@ import Groups from "./pages/Groups";
 import Community from "./pages/Community";
 import Goals from "./pages/Goals";
 import Pomodoro from "./pages/Pomodoro";
-import AiChatbot from "./pages/AiChatbot";
+import ProfilePage from "./pages/ProfilePage";
+import Admin from "./pages/Admin";
 import { restoreSession } from "./store/authSlice";
 
 export default function App() {
@@ -29,6 +30,14 @@ export default function App() {
     dispatch(restoreSession());
   }, [dispatch]);
 
+  useEffect(() => {
+    document.documentElement.style.colorScheme = themeMode;
+    try {
+      localStorage.setItem("themeMode", themeMode);
+    } catch {
+      /* Trình duyệt có thể chặn bộ nhớ cục bộ. */
+    }
+  }, [themeMode]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -53,8 +62,17 @@ export default function App() {
                   <Route path="/pomodoro" element={<Pomodoro />} />
                   <Route path="/groups" element={<Groups />} />
                   <Route path="/community" element={<Community />} />
-                  <Route path="/chatbot" element={<AiChatbot />} />
+                  <Route
+                    path="/chatbot"
+                    element={
+                      <Alert severity="info">
+                        Tính năng Trợ giảng AI đang tạm khóa để hoàn thiện các tính năng cốt lõi.
+                      </Alert>
+                    }
+                  />
                   <Route path="/goals" element={<Goals />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/admin" element={<Admin />} />
                 </Routes>
               </AppLayout>
             </ProtectedRoute>

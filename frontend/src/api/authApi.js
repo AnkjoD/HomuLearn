@@ -60,7 +60,7 @@ async function sendMutation(path, options = {}) {
     const csrf = await getCsrf();
     const res = await fetch(`${BASE}/${path}`, {
       ...options,
-      method: "POST",
+      method: options.method || "POST",
       credentials: "include",
       headers: { ...options.headers, [csrf.headerName]: csrf.token },
     });
@@ -97,4 +97,22 @@ export async function postRegister(email, password, fullName) {
 export async function postLogout() {
   await sendMutation("logout");
   invalidateCsrf();
+}
+
+// PATCH /api/v1/auth/me — cập nhật hồ sơ cá nhân
+export async function patchProfile(data) {
+  const res = await sendMutation("me", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+// POST /api/v1/auth/change-password — đổi mật khẩu
+export async function postChangePassword(data) {
+  await sendMutation("change-password", {
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
 }

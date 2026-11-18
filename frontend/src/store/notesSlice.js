@@ -6,6 +6,10 @@ import {
   createNote,
   updateNote,
   deleteNote,
+  fetchFolders,
+  createFolder,
+  updateFolder,
+  deleteFolder,
 } from "../api/notesApi";
 
 // ---------------------------------------------------------------------------
@@ -97,16 +101,62 @@ export const removeNote = createAsyncThunk(
   }
 );
 
+export const loadFolders = createAsyncThunk(
+  "notes/loadFolders",
+  async (_, { rejectWithValue }) => {
+    try {
+      return await fetchFolders();
+    } catch (err) {
+      return rejectWithValue(err.message || "Không tải được thư mục");
+    }
+  }
+);
+
+export const addFolder = createAsyncThunk(
+  "notes/addFolder",
+  async (data, { rejectWithValue }) => {
+    try {
+      return await createFolder(data);
+    } catch (err) {
+      return rejectWithValue(err.message || "Không tạo được thư mục");
+    }
+  }
+);
+
+export const editFolder = createAsyncThunk(
+  "notes/editFolder",
+  async ({ id, data }, { rejectWithValue }) => {
+    try {
+      return await updateFolder(id, data);
+    } catch (err) {
+      return rejectWithValue(err.message || "Không cập nhật được thư mục");
+    }
+  }
+);
+
+export const removeFolder = createAsyncThunk(
+  "notes/removeFolder",
+  async (id, { rejectWithValue }) => {
+    try {
+      await deleteFolder(id);
+      return id;
+    } catch (err) {
+      return rejectWithValue(err.message || "Không xóa được thư mục");
+    }
+  }
+);
+
 // ---------------------------------------------------------------------------
 // Slice
 // ---------------------------------------------------------------------------
 
 function resetNotesState(state) {
   state.items = [];
+  state.folders = [];
   state.current = null;
-  state.listStatus = state.currentStatus = state.mutationStatus = "idle";
-  state.listError = state.currentError = state.mutationError = null;
-  state.listRequestId = state.currentRequestId = state.mutationRequestId = null;
+  state.listStatus = state.foldersStatus = state.currentStatus = state.mutationStatus = "idle";
+  state.listError = state.foldersError = state.currentError = state.mutationError = null;
+  state.listRequestId = state.foldersRequestId = state.currentRequestId = state.mutationRequestId = null;
 }
 
 const notesSlice = createSlice({
@@ -114,18 +164,23 @@ const notesSlice = createSlice({
   initialState: {
     // Danh sách notes từ server (trang hiện tại)
     items: [],
+    // Danh sách thư mục từ server
+    folders: [],
     // Note đang xem trong NoteDetail
     current: null,
     listRequestId: null,
+    foldersRequestId: null,
     currentRequestId: null,
     mutationRequestId: null,
     // "idle" | "loading" | "succeeded" | "failed"
     listStatus: "idle",
+    foldersStatus: "idle",
     currentStatus: "idle",
     // "idle" | "saving" — POST/PATCH/DELETE đang chạy
     mutationStatus: "idle",
     // Lỗi danh sách
     listError: null,
+    foldersError: null,
     // Lỗi note đơn (404, v.v.)
     currentError: null,
     // Lỗi mutation (validation fieldErrors, v.v.)
@@ -258,6 +313,43 @@ const notesSlice = createSlice({
         state.mutationRequestId = null;
         state.mutationStatus = "idle";
         state.mutationError = action.payload;
+      });
+
+    // --- folders ---
+    builder
+      .addCase(loadFolders.pending, (state, action) => {
+        state.foldersRequestId = action.meta.requestId;
+        state.foldersStatus = "loading";
+        state.foldersError = null;
+      })
+      .addCase(loadFolders.fulfilled, (state, action) => {
+        if (state.foldersRequestId !== action.meta.requestId) return;
+        state.foldersRequestId = null;
+        state.foldersStatus = "succeeded";
+        state.folders = action.payload;
+      })
+      .addCase(loadFolders.rejected, (state, action) => {
+        if (state.foldersRequestId !== action.meta.requestId) return;
+        state.foldersRequestId = null;
+        state.foldersStatus = "failed";
+        state.foldersError = action.payload;
+      })
+      .addCase(addFolder.fulfilled, (state, action) => {
+        state.folders.push(action.payload);
+      })
+      .addCase(editFolder.fulfilled, (state, action) => {
+        const idx = state.folders.findIndex((f) => f.id === action.payload.id);
+        if (idx !== -1) state.folders[idx] = action.payload;
+      })
+      .addCase(removeFolder.fulfilled, (state, action) => {
+        const deletedId = action.payload;
+        state.folders = state.folders.filter((f) => f.id !== deletedId);
+        state.items = state.items.map((n) =>
+          n.folderId === deletedId ? { ...n, folderId: null } : n
+        );
+        if (state.current?.folderId === deletedId) {
+          state.current = { ...state.current, folderId: null };
+        }
       });
     builder.addCase(logout.fulfilled, resetNotesState);
     builder.addCase(login.fulfilled, resetNotesState);
