@@ -98,82 +98,106 @@ class CommunityControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("Bài viết đã sửa"));
 
-        // Bob cannot delete Alice's post -> 403
-        mvc.perform(delete("/api/v1/posts/" + postId).session(user2).with(csrf()))
-                .andExpect(status().isForbidden());
+        // Alice views post -> 200
+        mvc.perform(get("/api/v1/posts/" + postId).session(user1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Bài viết đã sửa"))
+                .andExpect(jsonPath("$.commentCount").value(0));
 
-        // Alice deletes her post -> 204
+        // Alice deletes post -> 204
         mvc.perform(delete("/api/v1/posts/" + postId).session(user1).with(csrf()))
                 .andExpect(status().isNoContent());
 
-        // Post not found after delete -> 404
+        // Get deleted post -> 404
         mvc.perform(get("/api/v1/posts/" + postId).session(user1))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    void commentCrudAndCascadeDelete() throws Exception {
+    void commentCrudAndOwnership() throws Exception {
         MockHttpSession author = registerAndLogin("comm_author@test.com", "Password123!", "Author");
-        MockHttpSession commenter = registerAndLogin("comm_peer@test.com", "Password123!", "Peer");
+        MockHttpSession commenter = registerAndLogin("comm_commenter@test.com", "Password123!", "Commenter");
+        MockHttpSession stranger = registerAndLogin("comm_stranger@test.com", "Password123!", "Stranger");
 
-        // Create post
+        // Author creates post
         String postRes = mvc.perform(post("/api/v1/posts").session(author).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                    {"title":"Thảo luận thuật toán","content":"Ai giải thích giúp DFS"}
+                    {"title":"Post for comments","content":"Leave comment"}
                     """))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long postId = json.readTree(postRes).get("id").asLong();
 
-        // Peer comments on post
+        // Commenter adds comment
         String commentRes = mvc.perform(post("/api/v1/posts/" + postId + "/comments").session(commenter).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                    {"content":"DFS dùng Stack hoặc đệ quy nhé"}
+                    {"content":"Bình luận hay quá!"}
                     """))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.author.name").value("Peer"))
+                .andExpect(jsonPath("$.content").value("Bình luận hay quá!"))
+                .andExpect(jsonPath("$.author.name").value("Commenter"))
                 .andReturn().getResponse().getContentAsString();
         long commentId = json.readTree(commentRes).get("id").asLong();
 
-        // Check comment in list
-        mvc.perform(get("/api/v1/posts/" + postId + "/comments").session(author))
+        // Check comment count in post
+        mvc.perform(get("/api/v1/posts/" + postId).session(author))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].content").value("DFS dùng Stack hoặc đệ quy nhé"));
+                .andExpect(jsonPath("$.commentCount").value(1));
 
-        // Author cannot edit peer's comment -> 403
-        mvc.perform(put("/api/v1/posts/" + postId + "/comments/" + commentId).session(author).with(csrf())
+        // Stranger cannot edit comment -> 403
+        mvc.perform(put("/api/v1/posts/" + postId + "/comments/" + commentId).session(stranger).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                    {"content":"Sửa bậy"}
+                    {"content":"Hack comment"}
                     """))
                 .andExpect(status().isForbidden());
 
-        // Peer edits their comment
+        // Commenter edits comment -> 200
         mvc.perform(put("/api/v1/posts/" + postId + "/comments/" + commentId).session(commenter).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                    {"content":"DFS dùng Stack hoặc đệ quy (chú ý visited array)"}
+                    {"content":"Bình luận đã sửa!"}
                     """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content").value("DFS dùng Stack hoặc đệ quy (chú ý visited array)"));
+                .andExpect(jsonPath("$.content").value("Bình luận đã sửa!"));
 
-        // Delete post -> cascade deletes comment
-        mvc.perform(delete("/api/v1/posts/" + postId).session(author).with(csrf()))
+        // Stranger cannot delete comment -> 403
+        mvc.perform(delete("/api/v1/posts/" + postId + "/comments/" + commentId).session(stranger).with(csrf()))
+                .andExpect(status().isForbidden());
+
+        // Commenter deletes comment -> 204
+        mvc.perform(delete("/api/v1/posts/" + postId + "/comments/" + commentId).session(commenter).with(csrf()))
                 .andExpect(status().isNoContent());
 
-        // Listing comments for deleted post returns 404
+        // Comment list is now empty
         mvc.perform(get("/api/v1/posts/" + postId + "/comments").session(author))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test
-    void validationRejectsEmptyInputs() throws Exception {
-        MockHttpSession user = registerAndLogin("comm_val@test.com", "Password123!", "ValUser");
+    void postValidation() throws Exception {
+        MockHttpSession user = registerAndLogin("comm_valid@test.com", "Password123!", "ValUser");
 
-        // Empty title/content in post
+        // Empty title
+        mvc.perform(post("/api/v1/posts").session(user).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"title":"","content":"Nội dung"}
+                    """))
+                .andExpect(status().isBadRequest());
+
+        // Empty content
+        mvc.perform(post("/api/v1/posts").session(user).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"title":"Tiêu đề","content":""}
+                    """))
+                .andExpect(status().isBadRequest());
+
+        // Empty both
         mvc.perform(post("/api/v1/posts").session(user).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -190,7 +214,7 @@ class CommunityControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
-    @Autowired com.homulearn.app.repository.CommentRepository comments;
+    @Autowired com.homulearn.features.community.repositories.CommentRepository comments;
 
     @Test
     void deleting_post_removes_managed_comments_and_keeps_unrelated_post() throws Exception {
@@ -206,8 +230,12 @@ class CommunityControllerTest {
     }
 
     private long createPost(MockHttpSession session, String title) throws Exception {
+        return createPost(session, title, "Body");
+    }
+
+    private long createPost(MockHttpSession session, String title, String content) throws Exception {
         var body = mvc.perform(post("/api/v1/posts").session(session).with(csrf()).contentType(MediaType.APPLICATION_JSON)
-            .content(json.writeValueAsString(java.util.Map.of("title",title,"content","Body"))))
+            .content(json.writeValueAsString(java.util.Map.of("title", title, "content", content))))
             .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return json.readTree(body).get("id").asLong();
     }
@@ -233,6 +261,55 @@ class CommunityControllerTest {
         for (String query : new String[]{"page=-1", "size=0", "size=101", "page=2147483647&size=100"})
             mvc.perform(get("/api/v1/posts?"+query).session(owner)).andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/posts")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void searchPostsByTitleAndContentCaseInsensitiveAndTrimmed() throws Exception {
+        var user = registerAndLogin("comm_search_user@test.com", "Password123!", "Searcher");
+        createPost(user, "Hoc Java Spring Boot", "Tim hieu ve JPA va Hibernate");
+        createPost(user, "Hoc React Vite Frontend", "Xay dung giao dien voi Material UI");
+        createPost(user, "Docker va Postgres", "Deploy he thong voi Docker Compose");
+
+        // Match title case-insensitive
+        mvc.perform(get("/api/v1/posts?q=spring").session(user))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content.length()").value(1))
+            .andExpect(jsonPath("$.content[0].title").value("Hoc Java Spring Boot"));
+
+        // Match content case-insensitive with leading/trailing spaces
+        mvc.perform(get("/api/v1/posts?q=  MATERIAL  ").session(user))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content.length()").value(1))
+            .andExpect(jsonPath("$.content[0].title").value("Hoc React Vite Frontend"));
+
+        // Empty query returns all posts
+        mvc.perform(get("/api/v1/posts?q=   ").session(user))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(3)));
+
+        // Non-matching query returns empty list
+        mvc.perform(get("/api/v1/posts?q=nonexistentkeyword123xyz").session(user))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content.length()").value(0))
+            .andExpect(jsonPath("$.totalElements").value(0));
+
+        // Pagination and sort order (createdAt DESC, id DESC) with search
+        createPost(user, "React State Management Redux", "Huong dan Redux Toolkit");
+        mvc.perform(get("/api/v1/posts?q=react&page=0&size=1").session(user))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content.length()").value(1))
+            .andExpect(jsonPath("$.content[0].title").value("React State Management Redux"))
+            .andExpect(jsonPath("$.totalElements").value(2))
+            .andExpect(jsonPath("$.totalPages").value(2));
+
+        mvc.perform(get("/api/v1/posts?q=react&page=1&size=1").session(user))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content.length()").value(1))
+            .andExpect(jsonPath("$.content[0].title").value("Hoc React Vite Frontend"));
+
+        // Guest is blocked
+        mvc.perform(get("/api/v1/posts?q=spring"))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test

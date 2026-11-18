@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   Typography,
@@ -20,6 +20,7 @@ import {
   Pagination,
   Stack,
   Divider,
+  InputAdornment,
 } from "@mui/material";
 import ChatBubbleOutlineRoundedIcon from "@mui/icons-material/ChatBubbleOutlineRounded";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
@@ -27,6 +28,13 @@ import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
+import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import ClearRoundedIcon from "@mui/icons-material/ClearRounded";
+import FavoriteRoundedIcon from "@mui/icons-material/FavoriteRounded";
+import FavoriteBorderRoundedIcon from "@mui/icons-material/FavoriteBorderRounded";
+import BookmarkRoundedIcon from "@mui/icons-material/BookmarkRounded";
+import BookmarkBorderRoundedIcon from "@mui/icons-material/BookmarkBorderRounded";
+import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
 import { useDispatch, useSelector } from "react-redux";
 import {
   loadPosts,
@@ -38,14 +46,22 @@ import {
   addComment,
   editComment,
   removeComment,
+  toggleReaction,
+  toggleBookmark,
+  submitPostReport,
   clearSelectedPost,
+  setSearchQuery,
 } from "../store/communitySlice";
 
 export default function Community() {
   const dispatch = useDispatch();
-  const { posts, page, totalPages, status, comments, commentsStatus, submitting, commentSubmitting, error, commentsError, detailError, selectedPost } =
+  const { posts, page, totalPages, status, searchQuery, comments, commentsStatus, submitting, commentSubmitting, error, commentsError, detailError, selectedPost } =
     useSelector((s) => s.community);
   const currentUser = useSelector((s) => s.auth.user);
+
+  // Search input state
+  const [searchInput, setSearchInput] = useState(searchQuery || "");
+  const prevSearchRef = useRef(searchInput);
 
   // Modal tạo / sửa bài
   const [postModalOpen, setPostModalOpen] = useState(false);
@@ -61,13 +77,42 @@ export default function Community() {
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editCommentText, setEditCommentText] = useState("");
 
+  // Modal báo cáo bài viết
+  const [reportPostId, setReportPostId] = useState(null);
+  const [reportReason, setReportReason] = useState("");
+  const [reportError, setReportError] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportNotice, setReportNotice] = useState("");
+
+  // Load initial posts
   useEffect(() => {
-    dispatch(loadPosts({ page: 0, size: 10 }));
+    dispatch(loadPosts({ page: 0, size: 10, query: searchInput }));
     return () => { dispatch(clearSelectedPost()); };
   }, [dispatch]);
 
+  // Debounced search (400ms)
+  useEffect(() => {
+    if (prevSearchRef.current === searchInput) {
+      return;
+    }
+    prevSearchRef.current = searchInput;
+    const timer = setTimeout(() => {
+      dispatch(setSearchQuery(searchInput));
+      dispatch(loadPosts({ page: 0, size: 10, query: searchInput }));
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [searchInput, dispatch]);
+
+  const handleClearSearch = () => {
+    prevSearchRef.current = "";
+    setSearchInput("");
+    dispatch(setSearchQuery(""));
+    dispatch(loadPosts({ page: 0, size: 10, query: "" }));
+  };
+
   const handlePageChange = (_, newPage) => {
-    dispatch(loadPosts({ page: newPage - 1, size: 10 }));
+    dispatch(loadPosts({ page: newPage - 1, size: 10, query: searchInput }));
   };
 
   // Mở modal tạo bài mới
@@ -109,7 +154,7 @@ export default function Community() {
         ).unwrap();
       }
       setPostModalOpen(false);
-      dispatch(loadPosts({ page: editingPostId ? page : 0, size: 10 }));
+      dispatch(loadPosts({ page: editingPostId ? page : 0, size: 10, query: searchInput }));
     } catch (err) {
       setPostError(err?.message || "Không thể lưu bài viết");
     }
@@ -120,7 +165,7 @@ export default function Community() {
     if (!window.confirm("Bạn có chắc chắn muốn xóa bài viết này?")) return;
     try {
       await dispatch(removePost(id)).unwrap();
-      dispatch(loadPosts({ page: posts.length === 1 ? Math.max(0, page - 1) : page, size: 10 }));
+      dispatch(loadPosts({ page: posts.length === 1 ? Math.max(0, page - 1) : page, size: 10, query: searchInput }));
       if (activePost?.id === id) {
         setDetailModalOpen(false);
         setActivePost(null);
@@ -223,10 +268,59 @@ export default function Community() {
         </Button>
       </Box>
 
-      {error && <Alert severity="error" action={<Button onClick={() => dispatch(loadPosts({ page, size: 10 }))}>Thử lại</Button>}>{error}</Alert>}
+      {/* Thanh tìm kiếm */}
+      <Box sx={{ mb: 3 }}>
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="Tìm kiếm bài viết theo tiêu đề hoặc nội dung..."
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          data-testid="community-search-input"
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchRoundedIcon color="action" />
+              </InputAdornment>
+            ),
+            endAdornment: searchInput ? (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  onClick={handleClearSearch}
+                  data-testid="clear-search-btn"
+                  edge="end"
+                >
+                  <ClearRoundedIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ) : null,
+          }}
+        />
+      </Box>
+
+      {error && (
+        <Alert
+          severity="error"
+          sx={{ mb: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => dispatch(loadPosts({ page, size: 10, query: searchInput }))}
+              data-testid="retry-btn"
+            >
+              Thử lại
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
+      )}
+
       {/* Danh sách bài đăng */}
       {status === "loading" && posts.length === 0 ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+        <Box sx={{ display: "flex", justifyContent: "center", py: 8 }} data-testid="posts-loading">
           <CircularProgress />
         </Box>
       ) : posts.length === 0 && status !== "failed" ? (
@@ -242,18 +336,30 @@ export default function Community() {
           }}
         >
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            Chưa có bài viết nào
+            {searchInput.trim() ? "Không tìm thấy bài viết phù hợp" : "Chưa có bài viết nào"}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Hãy là người đầu tiên chia sẻ câu hỏi hoặc kiến thức với cộng đồng!
+            {searchInput.trim()
+              ? `Không có kết quả nào cho "${searchInput.trim()}". Thử tìm với từ khóa khác.`
+              : "Hãy là người đầu tiên chia sẻ câu hỏi hoặc kiến thức với cộng đồng!"}
           </Typography>
-          <Button
-            variant="outlined"
-            startIcon={<AddRoundedIcon />}
-            onClick={handleOpenCreatePost}
-          >
-            Tạo bài đăng ngay
-          </Button>
+          {searchInput.trim() ? (
+            <Button
+              variant="outlined"
+              onClick={handleClearSearch}
+              data-testid="empty-clear-search-btn"
+            >
+              Xóa bộ lọc tìm kiếm
+            </Button>
+          ) : (
+            <Button
+              variant="outlined"
+              startIcon={<AddRoundedIcon />}
+              onClick={handleOpenCreatePost}
+            >
+              Tạo bài đăng ngay
+            </Button>
+          )}
         </Paper>
       ) : (
         <Stack spacing={2}>
@@ -278,42 +384,68 @@ export default function Community() {
                   <Box
                     sx={{
                       display: "flex",
-                      alignItems: "center",
                       justifyContent: "space-between",
+                      alignItems: "flex-start",
                       mb: 1.5,
                     }}
                   >
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                      <Avatar sx={{ bgcolor: "primary.main", width: 36, height: 36 }}>
-                        {(post.author?.name || "U")[0].toUpperCase()}
+                      <Avatar
+                        sx={{
+                          width: 38,
+                          height: 38,
+                          bgcolor: "primary.main",
+                          fontSize: "0.95rem",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {post.author?.name
+                          ? post.author.name.charAt(0).toUpperCase()
+                          : "U"}
                       </Avatar>
                       <Box>
-                        <Typography variant="subtitle2" fontWeight={600}>
-                          {post.author?.name || "Người dùng ẩn danh"}
-                        </Typography>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <Typography variant="subtitle2" fontWeight={700}>
+                            {post.author?.name || "Người dùng"}
+                          </Typography>
+                          {isOwner && (
+                            <Chip
+                              label="Tác giả"
+                              size="small"
+                              color="primary"
+                              variant="outlined"
+                              sx={{ height: 20, fontSize: "0.7rem" }}
+                            />
+                          )}
+                        </Box>
                         <Typography variant="caption" color="text.secondary">
-                          {new Date(post.createdAt).toLocaleString("vi-VN")}
+                          {new Date(post.createdAt).toLocaleDateString("vi-VN", {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                         </Typography>
                       </Box>
                     </Box>
+
                     {isOwner && (
                       <Box onClick={(e) => e.stopPropagation()}>
                         <Tooltip title="Chỉnh sửa">
                           <IconButton
                             size="small"
                             onClick={(e) => handleOpenEditPost(post, e)}
-                            disabled={submitting}
                             data-testid={`edit-post-${post.id}`}
                           >
                             <EditRoundedIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Xóa bài">
+                        <Tooltip title="Xóa">
                           <IconButton
                             size="small"
                             color="error"
                             onClick={(e) => handleDeletePost(post.id, e)}
-                            disabled={submitting}
                             data-testid={`delete-post-${post.id}`}
                           >
                             <DeleteOutlineRoundedIcon fontSize="small" />
@@ -349,16 +481,62 @@ export default function Community() {
                     sx={{
                       display: "flex",
                       alignItems: "center",
-                      gap: 2,
+                      gap: 1.5,
                       color: "text.secondary",
                     }}
+                    onClick={(e) => e.stopPropagation()}
                   >
+                    <Button
+                      size="small"
+                      color={post.reactedByMe ? "error" : "inherit"}
+                      startIcon={
+                        post.reactedByMe ? (
+                          <FavoriteRoundedIcon fontSize="small" />
+                        ) : (
+                          <FavoriteBorderRoundedIcon fontSize="small" />
+                        )
+                      }
+                      onClick={() => dispatch(toggleReaction(post.id))}
+                      data-testid={`react-post-${post.id}`}
+                    >
+                      {post.reactionCount || 0}
+                    </Button>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                       <ChatBubbleOutlineRoundedIcon fontSize="small" />
                       <Typography variant="caption" fontWeight={600}>
                         {post.commentCount || 0} bình luận
                       </Typography>
                     </Box>
+                    <Box sx={{ flex: 1 }} />
+                    <Tooltip title={post.bookmarkedByMe ? "Bỏ lưu" : "Lưu bài viết"}>
+                      <IconButton
+                        size="small"
+                        color={post.bookmarkedByMe ? "primary" : "default"}
+                        onClick={() => dispatch(toggleBookmark(post.id))}
+                        data-testid={`bookmark-post-${post.id}`}
+                      >
+                        {post.bookmarkedByMe ? (
+                          <BookmarkRoundedIcon fontSize="small" />
+                        ) : (
+                          <BookmarkBorderRoundedIcon fontSize="small" />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                    {!isOwner && (
+                      <Tooltip title="Báo cáo vi phạm">
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            setReportPostId(post.id);
+                            setReportReason("");
+                            setReportError("");
+                          }}
+                          data-testid={`report-post-${post.id}`}
+                        >
+                          <FlagOutlinedIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                   </Box>
                 </CardContent>
               </Card>
@@ -429,20 +607,21 @@ export default function Community() {
           <Button
             variant="contained"
             onClick={handleSavePost}
-            disabled={submitting || !postTitle.trim() || !postContent.trim()}
-            data-testid="save-post-btn"
+            disabled={submitting}
+            data-testid="submit-post-btn"
           >
             {submitting ? "Đang lưu..." : editingPostId ? "Cập nhật" : "Đăng bài"}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Dialog Chi tiết bài viết & Bình luận */}
+      {/* Modal Chi tiết & Thảo luận */}
       <Dialog
         open={detailModalOpen}
         onClose={handleCloseDetail}
         maxWidth="md"
         fullWidth
+        scroll="paper"
       >
         {activePost && (
           <>
@@ -450,50 +629,78 @@ export default function Community() {
               sx={{
                 display: "flex",
                 justifyContent: "space-between",
-                alignItems: "flex-start",
+                alignItems: "center",
+                pb: 1,
               }}
             >
-              <Box>
-                <Typography variant="h6" fontWeight={700}>
-                  {selectedPost?.title || activePost.title}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Đăng bởi {activePost.author?.name || "Ẩn danh"} lúc{" "}
-                  {new Date(activePost.createdAt).toLocaleString("vi-VN")}
-                </Typography>
-              </Box>
-              <IconButton aria-label="Đóng chi tiết" onClick={handleCloseDetail} size="small">
+              <Typography variant="h6" fontWeight={700}>
+                {selectedPost?.title || activePost.title}
+              </Typography>
+              <IconButton onClick={handleCloseDetail} size="small">
                 <CloseRoundedIcon />
               </IconButton>
             </DialogTitle>
+
             <DialogContent dividers>
-              <Typography
-                variant="body1"
-                sx={{ whiteSpace: "pre-wrap", mb: 3 }}
-                data-testid="detail-post-content"
-              >
-                {selectedPost?.content || activePost.content}
-              </Typography>
+              {/* Chi tiết bài viết */}
+              <Box sx={{ mb: 3 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2 }}>
+                  <Avatar
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      bgcolor: "primary.main",
+                      fontSize: "0.9rem",
+                    }}
+                  >
+                    {(selectedPost || activePost).author?.name
+                      ? (selectedPost || activePost).author.name
+                          .charAt(0)
+                          .toUpperCase()
+                      : "U"}
+                  </Avatar>
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight={700}>
+                      {(selectedPost || activePost).author?.name || "Người dùng"}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {new Date(
+                        (selectedPost || activePost).createdAt
+                      ).toLocaleDateString("vi-VN", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                <Typography
+                  variant="body1"
+                  sx={{ whiteSpace: "pre-wrap", lineHeight: 1.7 }}
+                >
+                  {(selectedPost || activePost).content}
+                </Typography>
+              </Box>
 
               <Divider sx={{ my: 2 }} />
 
-              <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+              {/* Phần Bình luận */}
+              <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>
                 Bình luận ({comments.length})
               </Typography>
 
-              {detailError && <Alert severity="error" action={<Button onClick={() => dispatch(loadPost(activePost.id))}>Tải lại bài</Button>}>{detailError}</Alert>}
-              {commentsError && <Alert severity="error" action={<Button onClick={() => dispatch(loadComments(activePost.id))}>Tải lại bình luận</Button>}>{commentsError}</Alert>}
               {/* Form gửi bình luận */}
-              <Box sx={{ display: "flex", gap: 1, mb: 3, mt: 1 }}>
+              <Box sx={{ display: "flex", gap: 1, mb: 3 }}>
                 <TextField
                   fullWidth
                   size="small"
-                  label="Bình luận của bạn"
-                  inputProps={{ maxLength: 5000 }}
-                  disabled={commentSubmitting || Boolean(detailError)}
-                  placeholder="Viết bình luận của bạn..."
+                  placeholder="Viết câu trả lời hoặc thảo luận..."
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
+                  disabled={commentSubmitting}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
@@ -506,86 +713,106 @@ export default function Community() {
                   variant="contained"
                   endIcon={<SendRoundedIcon />}
                   onClick={handleSendComment}
-                  disabled={!commentText.trim() || commentSubmitting || Boolean(detailError)}
+                  disabled={!commentText.trim() || commentSubmitting}
                   data-testid="send-comment-btn"
                 >
                   Gửi
                 </Button>
               </Box>
 
+              {commentsError && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {commentsError}
+                </Alert>
+              )}
+
               {/* Danh sách bình luận */}
               {commentsStatus === "loading" ? (
-                <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
+                <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
                   <CircularProgress size={24} />
                 </Box>
-              ) : comments.length === 0 && commentsStatus !== "failed" ? (
-                <Typography variant="body2" color="text.secondary" align="center" py={2}>
-                  Chưa có bình luận nào. Hãy bắt đầu cuộc trò chuyện!
+              ) : comments.length === 0 ? (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  align="center"
+                  sx={{ py: 3 }}
+                  data-testid="empty-comments"
+                >
+                  Chưa có bình luận nào. Hãy là người đầu tiên thảo luận!
                 </Typography>
               ) : (
-                <Stack spacing={2} data-testid="comments-list">
+                <Stack spacing={1.5}>
                   {comments.map((c) => {
                     const isCommentOwner =
                       currentUser && c.author?.id === currentUser.id;
-                    const isEditing = editingCommentId === c.id;
-
                     return (
                       <Paper
                         key={c.id}
+                        elevation={0}
+                        sx={{
+                          p: 1.5,
+                          borderRadius: 2,
+                          bgcolor: "action.hover",
+                        }}
                         data-testid={`comment-item-${c.id}`}
-                        variant="outlined"
-                        sx={{ p: 1.5, borderRadius: 2 }}
                       >
                         <Box
                           sx={{
                             display: "flex",
                             justifyContent: "space-between",
                             alignItems: "center",
-                            mb: 0.5,
                           }}
                         >
                           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                            <Avatar sx={{ width: 24, height: 24, fontSize: 12 }}>
-                              {(c.author?.name || "U")[0].toUpperCase()}
+                            <Avatar
+                              sx={{
+                                width: 24,
+                                height: 24,
+                                bgcolor: "secondary.main",
+                                fontSize: "0.75rem",
+                              }}
+                            >
+                              {c.author?.name
+                                ? c.author.name.charAt(0).toUpperCase()
+                                : "U"}
                             </Avatar>
-                            <Typography variant="subtitle2" fontSize={13} fontWeight={600}>
+                            <Typography variant="caption" fontWeight={700}>
                               {c.author?.name || "Người dùng"}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                              {new Date(c.createdAt).toLocaleTimeString("vi-VN", {
+                              {new Date(c.createdAt).toLocaleDateString("vi-VN", {
+                                month: "short",
+                                day: "numeric",
                                 hour: "2-digit",
                                 minute: "2-digit",
                               })}
                             </Typography>
                           </Box>
-                          {isCommentOwner && !isEditing && (
+
+                          {isCommentOwner && (
                             <Box>
                               <IconButton
                                 size="small"
                                 onClick={() => handleStartEditComment(c)}
-                                disabled={commentSubmitting}
-                              data-testid={`edit-comment-${c.id}`}
+                                data-testid={`edit-comment-${c.id}`}
                               >
-                                <EditRoundedIcon fontSize="small" sx={{ fontSize: 16 }} />
+                                <EditRoundedIcon fontSize="inherit" />
                               </IconButton>
                               <IconButton
                                 size="small"
                                 color="error"
                                 onClick={() => handleDeleteComment(c.id)}
-                                disabled={commentSubmitting}
-                              data-testid={`delete-comment-${c.id}`}
+                                data-testid={`delete-comment-${c.id}`}
                               >
-                                <DeleteOutlineRoundedIcon
-                                  fontSize="small"
-                                  sx={{ fontSize: 16 }}
-                                />
+                                <DeleteOutlineRoundedIcon fontSize="inherit" />
                               </IconButton>
                             </Box>
                           )}
                         </Box>
 
-                        {isEditing ? (
-                          <Box sx={{ mt: 1 }}>
+                        {editingCommentId === c.id ? (
+                          <Box sx={{ mt: 1, display: "flex", gap: 1 }}>
                             <TextField
                               fullWidth
                               size="small"
@@ -594,7 +821,7 @@ export default function Community() {
                               disabled={commentSubmitting}
                               data-testid={`edit-comment-input-${c.id}`}
                             />
-                            <Box sx={{ display: "flex", gap: 1, mt: 1, justifyContent: "flex-end" }}>
+                            <Box sx={{ display: "flex", gap: 0.5 }}>
                               <Button
                                 size="small"
                                 onClick={() => setEditingCommentId(null)}
@@ -606,7 +833,7 @@ export default function Community() {
                                 variant="contained"
                                 onClick={() => handleSaveEditComment(c.id)}
                                 disabled={commentSubmitting}
-                              data-testid={`save-edit-comment-${c.id}`}
+                                data-testid={`save-edit-comment-${c.id}`}
                               >
                                 Lưu
                               </Button>
@@ -633,6 +860,73 @@ export default function Community() {
           </>
         )}
       </Dialog>
+
+      {/* Dialog báo cáo bài viết */}
+      <Dialog
+        open={reportPostId !== null}
+        onClose={() => !reportSubmitting && setReportPostId(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle fontWeight={700}>Báo cáo bài viết</DialogTitle>
+        <DialogContent sx={{ pt: "8px !important" }}>
+          {reportError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {reportError}
+            </Alert>
+          )}
+          <TextField
+            label="Lý do báo cáo"
+            placeholder="VD: Spam, ngôn từ không phù hợp…"
+            fullWidth
+            multiline
+            rows={3}
+            required
+            value={reportReason}
+            onChange={(e) => {
+              setReportReason(e.target.value);
+              if (e.target.value.trim()) setReportError("");
+            }}
+            inputProps={{ maxLength: 500 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReportPostId(null)} disabled={reportSubmitting}>
+            Hủy
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            disabled={reportSubmitting || !reportReason.trim()}
+            onClick={async () => {
+              setReportSubmitting(true);
+              setReportError("");
+              const res = await dispatch(
+                submitPostReport({ postId: reportPostId, reason: reportReason.trim() })
+              );
+              setReportSubmitting(false);
+              if (submitPostReport.fulfilled.match(res)) {
+                setReportPostId(null);
+                setReportNotice("Đã gửi báo cáo tới quản trị viên.");
+              } else {
+                setReportError(res.payload || "Không gửi được báo cáo");
+              }
+            }}
+          >
+            {reportSubmitting ? "Đang gửi…" : "Gửi báo cáo"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {reportNotice && (
+        <Alert
+          severity="success"
+          onClose={() => setReportNotice("")}
+          sx={{ position: "fixed", bottom: 24, right: 24, zIndex: 1400 }}
+        >
+          {reportNotice}
+        </Alert>
+      )}
     </Box>
   );
 }

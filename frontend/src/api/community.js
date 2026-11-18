@@ -49,8 +49,12 @@ async function mutation(url, opts = {}) {
   }
 }
 
-export async function fetchPosts(page = 0, size = 10) {
-  const res = await fetch(`${BASE}?page=${page}&size=${size}`, {
+export async function fetchPosts(page = 0, size = 10, query = "") {
+  const params = new URLSearchParams({ page, size });
+  if (query && query.trim()) {
+    params.set("q", query.trim());
+  }
+  const res = await fetch(`${BASE}?${params.toString()}`, {
     credentials: "include",
   });
   if (!res.ok) throw await parseError(res);
@@ -108,5 +112,20 @@ export async function updateComment(postId, commentId, data) {
 export async function deleteComment(postId, commentId) {
   return mutation(`${BASE}/${postId}/comments/${commentId}`, {
     method: "DELETE",
+  });
+}
+
+export async function togglePostReaction(postId) {
+  return mutation(`${BASE}/${postId}/reaction`, { method: "POST" });
+}
+
+export async function togglePostBookmark(postId) {
+  return mutation(`${BASE}/${postId}/bookmark`, { method: "POST" });
+}
+
+export async function reportPost(postId, reason) {
+  return mutation(`${BASE}/${postId}/report`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
   });
 }

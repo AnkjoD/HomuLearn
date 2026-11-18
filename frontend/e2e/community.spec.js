@@ -38,7 +38,7 @@ test.describe('Community Posts & Comments — real API, session, authorization &
     const postContent = 'Giải thuật tìm đường đi ngắn nhất đồ thị có trọng số không âm.';
     await pageA.getByTestId('post-title-input').locator('input').fill(postTitle);
     await pageA.getByTestId('post-content-input').locator('textarea').first().fill(postContent);
-    await pageA.getByTestId('save-post-btn').click();
+    await pageA.getByTestId('submit-post-btn').click();
 
     // Verify post card appears for User A
     const postCardA = pageA.locator(`[data-testid^="post-card-"]`, { hasText: postTitle });
@@ -58,7 +58,7 @@ test.describe('Community Posts & Comments — real API, session, authorization &
     // 3. User B opens post detail and writes a comment
     await postCardB.click();
 
-    const commentInput = pageB.getByRole('textbox', { name: 'Bình luận của bạn', exact: true });
+    const commentInput = pageB.getByTestId('comment-input').locator('input');
     await expect(commentInput).toBeVisible();
     await commentInput.fill('Độ phức tạp là O((V + E) log V) khi dùng min-heap.');
     await pageB.getByTestId('send-comment-btn').click();
@@ -95,7 +95,7 @@ test.describe('Community Posts & Comments — real API, session, authorization &
     await postCardA.locator('[data-testid^="edit-post-"]').click();
     const updatedTitle = postTitle + ' [Đã cập nhật]';
     await pageA.getByTestId('post-title-input').locator('input').fill(updatedTitle);
-    await pageA.getByTestId('save-post-btn').click();
+    await pageA.getByTestId('submit-post-btn').click();
     await expect(pageA.getByText(updatedTitle)).toBeVisible();
 
     // 6. User A deletes their own post -> cascade deletes everything
@@ -129,11 +129,11 @@ test.describe('Community Posts & Comments — real API, session, authorization &
       if (route.request().method()==='POST' && !failed) { failed=true;return route.abort(); }
       return route.continue();
     });
-    await page.getByTestId('save-post-btn').click();
+    await page.getByTestId('submit-post-btn').click();
     await expect(page.getByRole('dialog').getByRole('alert')).toBeVisible();
     await expect(page.getByLabel('Tiêu đề bài viết')).toHaveValue(title);
     await expect(page.getByRole('textbox', {name:/^Nội dung/})).toHaveValue('Giữ nội dung khi lỗi mạng');
-    await page.getByTestId('save-post-btn').click();
+    await page.getByTestId('submit-post-btn').click();
     const card = page.locator('[data-testid^="post-card-"]', {hasText:title});
     await expect(card).toBeVisible();
     page.once('dialog', d=>d.accept());await card.locator('[data-testid^="delete-post-"]').click();

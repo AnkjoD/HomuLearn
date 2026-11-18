@@ -1,286 +1,815 @@
-import React, { useState, useRef } from 'react';
-import { Box, Typography, Grid, Card, Avatar, Chip, Button, TextField, IconButton, Tabs, Tab, Dialog, DialogTitle, DialogContent, DialogActions, FormControlLabel, Switch, Badge, Divider, InputAdornment, Paper } from '@mui/material';
-import SendRoundedIcon from '@mui/icons-material/SendRounded';
-import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
-import LockRoundedIcon from '@mui/icons-material/LockRounded';
-import PublicRoundedIcon from '@mui/icons-material/PublicRounded';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import PersonAddRoundedIcon from '@mui/icons-material/PersonAddRounded';
-import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
-import PeopleAltRoundedIcon from '@mui/icons-material/PeopleAltRounded';
-import ExploreRoundedIcon from '@mui/icons-material/ExploreRounded';
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Alert,
+  Avatar,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  FormControlLabel,
+  Grid,
+  IconButton,
+  InputAdornment,
+  List,
+  ListItem,
+  ListItemAvatar,
+  ListItemText,
+  Paper,
+  Switch,
+  Tab,
+  Tabs,
+  TextField,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import SendRoundedIcon from "@mui/icons-material/SendRounded";
+import GroupsRoundedIcon from "@mui/icons-material/GroupsRounded";
+import LockRoundedIcon from "@mui/icons-material/LockRounded";
+import PublicRoundedIcon from "@mui/icons-material/PublicRounded";
+import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import PersonAddRoundedIcon from "@mui/icons-material/PersonAddRounded";
+import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import PeopleAltRoundedIcon from "@mui/icons-material/PeopleAltRounded";
+import ExploreRoundedIcon from "@mui/icons-material/ExploreRounded";
+import ExitToAppRoundedIcon from "@mui/icons-material/ExitToAppRounded";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import {
+  createGroup,
+  deleteGroup,
+  fetchGroupMembers,
+  fetchGroupMessages,
+  fetchGroups,
+  joinGroup,
+  leaveGroup,
+  sendGroupMessage,
+} from "../api/groups";
 
-// GET  /api/groups?joined=true  → Group[]
-// GET  /api/groups/discover     → Group[]
-// POST /api/groups              → Group
-// POST /api/groups/:id/join     → { ok }
-// GET  /api/messages/:id        → Message[]
-// POST /api/messages/:id        → Message
-// GET  /api/friends             → Friend[]
-// POST /api/friends             → Friend
-
-const AVATAR_COLORS = ['#0F4C81','#FDB813','#16A34A','#0284C7','#DC2626','#7C3AED','#EA580C'];
-
-const INIT_GROUPS = [
-  { id:'g1', name:'Giải tích K22',     members:8,  avatarColor:'#0F4C81', privacy:'public',  joined:true, subject:'Toán',  desc:'Nhóm ôn thi Giải tích K22 IUH', lastMsg:'Ai có note chương 4?' },
-  { id:'g2', name:'Vật lý nhóm 3',    members:5,  avatarColor:'#FDB813', privacy:'private', joined:true, subject:'Lý',    desc:'Nhóm riêng vật lý đại cương',   lastMsg:'Họp 8h tối nay!' },
-  { id:'g3', name:'Python Self-study', members:12, avatarColor:'#16A34A', privacy:'public',  joined:true, subject:'CNTT', desc:'Tự học Python cùng nhau',         lastMsg:'Share code bài tập 5' },
+const AVATAR_COLORS = [
+  "#0F4C81",
+  "#FDB813",
+  "#16A34A",
+  "#0284C7",
+  "#DC2626",
+  "#7C3AED",
+  "#EA580C",
 ];
 
-const SUGGESTED = [
-  { id:'s1', name:'Toán rời rạc IUH',  members:20, avatarColor:'#0284C7', subject:'Toán',      desc:'Ôn tập toán rời rạc, giải đề cùng nhau mỗi tối',    match:92, posts:34 },
-  { id:'s2', name:'English Club IUH',  members:30, avatarColor:'#7C3AED', subject:'Tiếng Anh', desc:'Luyện IELTS, giao tiếp tiếng Anh hàng ngày',         match:85, posts:51 },
-  { id:'s3', name:'CTDL & Giải thuật', members:18, avatarColor:'#EA580C', subject:'CNTT',      desc:'Thảo luận CTDL, code contest, phỏng vấn kỹ thuật',   match:88, posts:27 },
-  { id:'s4', name:'Hóa Hữu cơ',        members:15, avatarColor:'#DC2626', subject:'Hóa',       desc:'Nhóm học Hóa hữu cơ, chia sẻ tài liệu thí nghiệm',  match:78, posts:19 },
-  { id:'s5', name:'Machine Learning',  members:25, avatarColor:'#16A34A', subject:'CNTT',      desc:'Học ML từ cơ bản, Kaggle, paper reading mỗi tuần',    match:81, posts:42 },
-  { id:'s6', name:'Vẽ kỹ thuật AutoCAD',members:9, avatarColor:'#0F4C81', subject:'Cơ khí',   desc:'Luyện AutoCAD, SolidWorks, chia sẻ bản vẽ kỹ thuật', match:60, posts:11 },
-];
-
-const INIT_FRIENDS = [
-  { id:'dm1', name:'Trần Linh',    avatar:'TL', color:'#0F4C81', lastMsg:'Bạn hiểu bài 5 chưa?',   unread:2 },
-  { id:'dm2', name:'Nguyễn Hùng', avatar:'NH', color:'#FDB813', lastMsg:'Cho mình xin note nhé!',  unread:0 },
-  { id:'dm3', name:'Phạm Anh',    avatar:'PA', color:'#16A34A', lastMsg:'OK gặp tại thư viện!',    unread:1 },
-];
-
-const INIT_MSGS = {
-  g1:[{id:1,user:'Minh',avatar:'M',text:'Ai có note chương 4?',   time:'20:12',self:false},
-      {id:2,user:'Bạn', avatar:'B',text:'Mình có, để mình share!',time:'20:13',self:true },
-      {id:3,user:'Lan', avatar:'L',text:'Mình cần thêm bài tập 😅',time:'20:15',self:false}],
-  g2:[{id:1,user:'Hùng',avatar:'H',text:'Họp 8h tối nay nhé!',   time:'18:00',self:false}],
-  g3:[{id:1,user:'Nam', avatar:'N',text:'Share code bài tập 5',    time:'17:30',self:false}],
-  dm1:[{id:1,user:'Trần Linh',   avatar:'TL',text:'Bạn hiểu bài 5 chưa?',time:'19:00',self:false},
-       {id:2,user:'Bạn',         avatar:'B', text:'Chưa, khó quá 😭',     time:'19:01',self:true }],
-  dm2:[{id:1,user:'Nguyễn Hùng',avatar:'NH',text:'Cho mình xin note nhé!',time:'18:30',self:false}],
-  dm3:[{id:1,user:'Phạm Anh',   avatar:'PA',text:'OK gặp tại thư viện!',  time:'17:00',self:false}],
-};
-
-function ChatArea({ id, group, isDM, msgs = [], onSend }) {
-  const [input, setInput] = useState('');
-  const bottomRef = useRef(null);
-  const send = () => { if (!input.trim()) return; onSend(id, input.trim()); setInput(''); };
-  React.useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [msgs.length]);
-  if (!group) return (
-    <Card sx={{ borderRadius:'16px', border:'1px solid', borderColor:'divider', height:'80vh', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:2, color:'text.disabled' }} elevation={0}>
-      <GroupsRoundedIcon sx={{ fontSize:56, opacity:0.2 }}/>
-      <Typography variant="body2">Chọn nhóm hoặc bạn bè để bắt đầu</Typography>
-    </Card>
-  );
-  return (
-    <Card sx={{ borderRadius:'16px', border:'1px solid', borderColor:'divider', height:'80vh', display:'flex', flexDirection:'column' }} elevation={0}>
-      <Box sx={{ px:3, py:2, borderBottom:'1px solid', borderColor:'divider', display:'flex', alignItems:'center', gap:1.5 }}>
-        <Avatar sx={{ bgcolor: isDM ? group.color : group.avatarColor, width:36, height:36, fontSize:12, fontWeight:700 }}>
-          {isDM ? group.avatar : <GroupsRoundedIcon sx={{ fontSize:18 }}/>}
-        </Avatar>
-        <Box>
-          <Typography fontWeight={700}>{group.name}</Typography>
-          {!isDM && <Typography variant="caption" color="text.secondary">{group.members} thành viên · {group.subject}</Typography>}
-        </Box>
-        {!isDM && <Chip label={group.privacy === 'private' ? '🔒 Riêng tư' : '🌐 Công khai'} size="small" sx={{ ml:'auto', fontSize:11 }}/>}
-      </Box>
-      <Box sx={{ flex:1, overflowY:'auto', p:2.5, display:'flex', flexDirection:'column', gap:1.5 }}>
-        {msgs.map(m => (
-          <Box key={m.id} sx={{ display:'flex', flexDirection: m.self ? 'row-reverse' : 'row', alignItems:'flex-end', gap:1 }}>
-            {!m.self && <Avatar sx={{ width:28, height:28, fontSize:11, fontWeight:700, bgcolor: '#E2E8F0', color:'#475569' }}>{m.avatar}</Avatar>}
-            <Box sx={{ maxWidth:'65%' }}>
-              {!m.self && <Typography variant="caption" color="text.secondary" sx={{ px:1 }}>{m.user}</Typography>}
-              <Paper elevation={0} sx={{ px:2, py:1, bgcolor: m.self ? '#0F4C81' : '#F1F5F9', color: m.self ? '#fff' : 'text.primary', borderRadius: m.self ? '18px 18px 4px 18px' : '18px 18px 18px 4px' }}>
-                <Typography variant="body2">{m.text}</Typography>
-              </Paper>
-              <Typography variant="caption" color="text.disabled" sx={{ display:'block', px:1, mt:0.25, textAlign: m.self ? 'right' : 'left' }}>{m.time}</Typography>
-            </Box>
-          </Box>
-        ))}
-        {msgs.length === 0 && (
-          <Box sx={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'text.disabled', gap:1 }}>
-            <PeopleAltRoundedIcon sx={{ fontSize:40, opacity:0.25 }}/>
-            <Typography variant="caption">Chưa có tin nhắn. Hãy bắt đầu cuộc trò chuyện!</Typography>
-          </Box>
-        )}
-        <div ref={bottomRef}/>
-      </Box>
-      <Box sx={{ px:3, py:2, borderTop:'1px solid', borderColor:'divider', display:'flex', gap:1 }}>
-        <TextField fullWidth size="small" placeholder="Nhắn tin…" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&send()} sx={{ '& .MuiOutlinedInput-root':{ borderRadius:'12px' } }}/>
-        <IconButton onClick={send} disabled={!input.trim()} sx={{ bgcolor:'#0F4C81', color:'#fff', borderRadius:'12px', width:42, height:42, '&:hover':{ bgcolor:'#0D3F6E' }, '&.Mui-disabled':{ bgcolor:'action.disabledBackground' } }}>
-          <SendRoundedIcon fontSize="small"/>
-        </IconButton>
-      </Box>
-    </Card>
-  );
+function makeClientMsgId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function SuggestedCard({ g, onJoin }) {
-  // Ảnh cover ngẫu nhiên theo môn học hoặc màu
-  const coverBg = g.avatarColor + '20'; // màu nhạt làm nền
-  return (
-    <Card sx={{ borderRadius:'16px', border:'1px solid', borderColor:'divider', p:0, overflow:'hidden', transition:'all 0.2s', '&:hover':{ borderColor:'primary.main', boxShadow:'0 4px 20px rgba(15,76,129,0.12)' }, display:'flex', flexDirection:'column' }} elevation={0}>
-      <Box sx={{ height: 100, bgcolor: coverBg, position:'relative', backgroundImage: `linear-gradient(135deg, ${g.avatarColor}40 0%, ${g.avatarColor}10 100%)` }}>
-        <Box sx={{ position:'absolute', bottom:-24, left:16, p:0.5, bgcolor:'#fff', borderRadius:'50%' }}>
-          <Avatar sx={{ bgcolor:g.avatarColor, width:48, height:48, boxShadow:'0 2px 8px rgba(0,0,0,0.1)' }}><GroupsRoundedIcon/></Avatar>
-        </Box>
-        <Box sx={{ position:'absolute', top:12, right:12, bgcolor:'#fff', color:'#16A34A', borderRadius:'20px', px:1, py:0.25, fontSize:11, fontWeight:700, boxShadow:'0 2px 4px rgba(0,0,0,0.05)' }}>{g.match}% phù hợp</Box>
-      </Box>
-      <Box sx={{ p:2.5, pt:4, flex:1, display:'flex', flexDirection:'column' }}>
-        <Typography fontWeight={700} fontSize={16} noWrap mb={0.5}>{g.name}</Typography>
-        <Box sx={{ display:'flex', alignItems:'center', gap:1, mb:1.5 }}>
-          <Typography variant="caption" color="text.secondary">{g.members} thành viên</Typography>
-          <Typography variant="caption" color="text.secondary">·</Typography>
-          <Typography variant="caption" color="text.secondary">{g.posts} bài đăng</Typography>
-        </Box>
-        <Typography variant="body2" color="text.secondary" sx={{ mb:2, flex:1, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{g.desc}</Typography>
-        <Box sx={{ display:'flex', gap:1, mt:'auto' }}>
-          <Chip label={g.subject} size="small" sx={{ bgcolor:g.avatarColor+'15', color:g.avatarColor, fontWeight:600, borderRadius:'8px' }}/>
-          <Button fullWidth variant="contained" size="small" onClick={()=>onJoin(g.id)} sx={{ ml:'auto', borderRadius:'10px', bgcolor:'#0F4C81', '&:hover':{ bgcolor:'#0D3F6E' }, textTransform:'none', fontWeight:600 }}>Tham gia nhóm</Button>
-        </Box>
-      </Box>
-    </Card>
-  );
+function initials(name) {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
 }
 
 export default function Groups() {
   const [tab, setTab] = useState(0);
-  const [groups, setGroups] = useState(INIT_GROUPS);
-  const [friends, setFriends] = useState(INIT_FRIENDS);
-  const [msgs, setMsgs] = useState(INIT_MSGS);
-  const [activeId, setActiveId] = useState('g1');
-  const [search, setSearch] = useState('');
+  const [groups, setGroups] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
+
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [msgSearch, setMsgSearch] = useState("");
+  const [debouncedMsgSearch, setDebouncedMsgSearch] = useState("");
+  const [msgInput, setMsgInput] = useState("");
+  const [sendingMsg, setSendingMsg] = useState(false);
+  const [pendingClientMsgId, setPendingClientMsgId] = useState(null);
+  const chatEndRef = useRef(null);
+  const shouldScrollBottomRef = useRef(true);
+
+  const [searchDiscover, setSearchDiscover] = useState("");
+
+  // Create group dialog
   const [createOpen, setCreateOpen] = useState(false);
-  const [addFriendOpen, setAddFriendOpen] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newDesc, setNewDesc] = useState('');
-  const [newSubject, setNewSubject] = useState('');
-  const [isPrivate, setIsPrivate] = useState(false);
-  const [newColor, setNewColor] = useState(AVATAR_COLORS[0]);
-  const [friendName, setFriendName] = useState('');
-  const [suggested, setSuggested] = useState(SUGGESTED);
-  const [discoverSearch, setDiscoverSearch] = useState('');
+  const [createDraft, setCreateDraft] = useState({
+    name: "",
+    subject: "",
+    description: "",
+    privacy: "PUBLIC",
+    avatarColor: AVATAR_COLORS[0],
+  });
+  const [createSubmitting, setCreateSubmitting] = useState(false);
 
-  const [showDiscover, setShowDiscover] = useState(false);
-  const isDM = tab === 1;
-  const activeGroup = groups.find(g => g.id === activeId);
-  const activeFriend = friends.find(f => f.id === activeId);
+  // Members dialog
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [members, setMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(false);
 
-  const send = (id, text) => {
-    const msg = { id:Date.now(), user:'Bạn', avatar:'B', text, time:new Date().toLocaleTimeString('vi',{hour:'2-digit',minute:'2-digit'}), self:true };
-    setMsgs(m => ({ ...m, [id]: [...(m[id]||[]), msg] }));
+  const loadAllGroups = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const list = await fetchGroups();
+      setGroups(list);
+      setSelectedGroupId((prev) => {
+        if (prev && list.some((g) => g.id === prev && g.joined)) return prev;
+        const firstJoined = list.find((g) => g.joined);
+        return firstJoined ? firstJoined.id : null;
+      });
+    } catch (err) {
+      setError(err.message || "Không tải được danh sách nhóm học");
+    } finally {
+      setLoading(false);
+    }
   };
-  const createGroup = () => {
-    if (!newName.trim()) return;
-    const g = { id:`g${Date.now()}`, name:newName, desc:newDesc, subject:newSubject, members:1, avatarColor:newColor, privacy:isPrivate?'private':'public', joined:true, lastMsg:'' };
-    setGroups(gs=>[...gs,g]); setMsgs(m=>({...m,[g.id]:[]}));
-    setActiveId(g.id); setTab(0); setNewName(''); setNewDesc(''); setNewSubject(''); setIsPrivate(false); setCreateOpen(false);
-  };
-  const addFriend = () => {
-    if (!friendName.trim()) return;
-    const f = { id:`dm${Date.now()}`, name:friendName, avatar:friendName.slice(0,2).toUpperCase(), color:AVATAR_COLORS[friends.length%AVATAR_COLORS.length], lastMsg:'', unread:0 };
-    setFriends(fs=>[...fs,f]); setMsgs(m=>({...m,[f.id]:[]}));
-    setActiveId(f.id); setTab(1); setFriendName(''); setAddFriendOpen(false);
-  };
-  const joinGroup = (sid) => {
-    const s = suggested.find(g=>g.id===sid); if (!s) return;
-    const g = { ...s, joined:true, lastMsg:'', privacy:'public' };
-    setGroups(gs=>[...gs,g]); setMsgs(m=>({...m,[g.id]:[]}));
-    setSuggested(ss=>ss.filter(x=>x.id!==sid)); setActiveId(g.id); setTab(0);
-  };
-  const filteredGroups = groups.filter(g=>g.name.toLowerCase().includes(search.toLowerCase()));
-  const filteredFriends = friends.filter(f=>f.name.toLowerCase().includes(search.toLowerCase()));
-  const filteredSugg = suggested.filter(g=>g.name.toLowerCase().includes(discoverSearch.toLowerCase())||g.subject.toLowerCase().includes(discoverSearch.toLowerCase()));
 
-  const SidebarItem = ({ item, isGroup }) => (
-    <Box onClick={()=>setActiveId(item.id)} sx={{ display:'flex', alignItems:'center', gap:1.5, px:2, py:1.5, cursor:'pointer', bgcolor:activeId===item.id?'rgba(15,76,129,0.08)':'transparent', borderLeft:'3px solid', borderColor:activeId===item.id?'#0F4C81':'transparent', '&:hover':{ bgcolor:'action.hover' }, transition:'all 0.15s' }}>
-      {isGroup ? <Avatar sx={{ bgcolor:item.avatarColor, width:36, height:36 }}><GroupsRoundedIcon sx={{ fontSize:18 }}/></Avatar>
-        : <Badge badgeContent={item.unread||0} color="error" overlap="circular"><Avatar sx={{ bgcolor:item.color, width:36, height:36, fontSize:12, fontWeight:700 }}>{item.avatar}</Avatar></Badge>}
-      <Box sx={{ flex:1, minWidth:0 }}>
-        <Box sx={{ display:'flex', alignItems:'center', gap:0.5 }}>
-          <Typography variant="body2" fontWeight={700} noWrap>{item.name}</Typography>
-          {isGroup && item.privacy==='private' && <LockRoundedIcon sx={{ fontSize:12, color:'text.disabled' }}/>}
-        </Box>
-        <Typography variant="caption" color="text.secondary" noWrap>{item.lastMsg}</Typography>
-      </Box>
-    </Box>
-  );
+  useEffect(() => {
+    loadAllGroups();
+  }, []);
+
+  const PAGE_SIZE = 30;
+
+  const loadMessagesForGroup = async (groupId, query = "", silent = false) => {
+    if (!groupId) {
+      setMessages([]);
+      setHasMoreOlder(false);
+      return;
+    }
+    if (!silent) {
+      setMessagesLoading(true);
+      shouldScrollBottomRef.current = true;
+    }
+    try {
+      const list = await fetchGroupMessages(groupId, { query, limit: PAGE_SIZE });
+      if (silent && !query.trim()) {
+        // Khi polling: giữ lại các tin cũ hơn đã tải thêm, chỉ nối các tin mới hơn
+        setMessages((prev) => {
+          const map = new Map(prev.map((m) => [m.id, m]));
+          for (const m of list) map.set(m.id, m);
+          return Array.from(map.values()).sort((a, b) => a.id - b.id);
+        });
+      } else {
+        setMessages(list);
+        setHasMoreOlder(!query.trim() && list.length === PAGE_SIZE);
+      }
+    } catch (err) {
+      if (!silent) setActionError(err.message || "Không tải được tin nhắn");
+    } finally {
+      if (!silent) setMessagesLoading(false);
+    }
+  };
+
+  const handleLoadOlder = async () => {
+    if (!selectedGroupId || loadingOlder || !hasMoreOlder || messages.length === 0) return;
+    setLoadingOlder(true);
+    shouldScrollBottomRef.current = false;
+    try {
+      const oldestId = messages[0].id;
+      const older = await fetchGroupMessages(selectedGroupId, {
+        beforeId: oldestId,
+        limit: PAGE_SIZE,
+      });
+      setMessages((prev) => [...older, ...prev]);
+      setHasMoreOlder(older.length === PAGE_SIZE);
+    } catch (err) {
+      setActionError(err.message || "Không tải được tin nhắn cũ hơn");
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedMsgSearch(msgSearch), 300);
+    return () => clearTimeout(t);
+  }, [msgSearch]);
+
+  useEffect(() => {
+    setMsgSearch("");
+    setDebouncedMsgSearch("");
+  }, [selectedGroupId]);
+
+  useEffect(() => {
+    if (!selectedGroupId) {
+      setMessages([]);
+      setHasMoreOlder(false);
+      return;
+    }
+    loadMessagesForGroup(selectedGroupId, debouncedMsgSearch, false);
+    const timer = setInterval(() => {
+      loadMessagesForGroup(selectedGroupId, debouncedMsgSearch, true);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [selectedGroupId, debouncedMsgSearch]);
+
+  useEffect(() => {
+    if (shouldScrollBottomRef.current) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages.length]);
+
+  const myGroups = groups.filter((g) => g.joined);
+  const discoverGroups = groups
+    .filter((g) => !g.joined)
+    .filter(
+      (g) =>
+        !searchDiscover.trim() ||
+        g.name.toLowerCase().includes(searchDiscover.toLowerCase()) ||
+        (g.subject || "").toLowerCase().includes(searchDiscover.toLowerCase()) ||
+        (g.description || "").toLowerCase().includes(searchDiscover.toLowerCase())
+    );
+
+  const activeGroup = myGroups.find((g) => g.id === selectedGroupId) || null;
+
+  const handleCreateGroup = async (e) => {
+    e.preventDefault();
+    if (!createDraft.name.trim()) return;
+    setCreateSubmitting(true);
+    setActionError("");
+    try {
+      const created = await createGroup({
+        name: createDraft.name.trim(),
+        subject: createDraft.subject.trim() || "Chung",
+        description: createDraft.description.trim(),
+        privacy: createDraft.privacy,
+        avatarColor: createDraft.avatarColor,
+      });
+      setGroups((prev) => [created, ...prev]);
+      setSelectedGroupId(created.id);
+      setCreateOpen(false);
+      setCreateDraft({
+        name: "",
+        subject: "",
+        description: "",
+        privacy: "PUBLIC",
+        avatarColor: AVATAR_COLORS[0],
+      });
+      setTab(0);
+    } catch (err) {
+      setActionError(err.message || "Không tạo được nhóm");
+    } finally {
+      setCreateSubmitting(false);
+    }
+  };
+
+  const handleJoinGroup = async (groupId) => {
+    setActionError("");
+    try {
+      const updated = await joinGroup(groupId);
+      setGroups((prev) => prev.map((g) => (g.id === groupId ? updated : g)));
+      setSelectedGroupId(groupId);
+      setTab(0);
+    } catch (err) {
+      setActionError(err.message || "Không thể tham gia nhóm");
+    }
+  };
+
+  const handleLeaveGroup = async (groupId) => {
+    setActionError("");
+    try {
+      await leaveGroup(groupId);
+      setGroups((prev) =>
+        prev.map((g) =>
+          g.id === groupId
+            ? { ...g, joined: false, myRole: null, memberCount: Math.max(0, g.memberCount - 1) }
+            : g
+        )
+      );
+      if (selectedGroupId === groupId) {
+        const next = myGroups.find((g) => g.id !== groupId);
+        setSelectedGroupId(next ? next.id : null);
+      }
+    } catch (err) {
+      setActionError(err.message || "Không thể rời nhóm");
+    }
+  };
+
+  const handleDeleteGroup = async (groupId) => {
+    setActionError("");
+    try {
+      await deleteGroup(groupId);
+      const remaining = groups.filter((g) => g.id !== groupId);
+      setGroups(remaining);
+      if (selectedGroupId === groupId) {
+        const next = remaining.find((g) => g.joined);
+        setSelectedGroupId(next ? next.id : null);
+      }
+    } catch (err) {
+      setActionError(err.message || "Không thể xóa nhóm");
+    }
+  };
+
+  const handleOpenMembers = async (groupId) => {
+    setMembersOpen(true);
+    setMembersLoading(true);
+    try {
+      const list = await fetchGroupMembers(groupId);
+      setMembers(list);
+    } catch (err) {
+      setActionError(err.message || "Không tải được danh sách thành viên");
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    const content = msgInput.trim();
+    if (!content || !activeGroup || sendingMsg) return;
+    const clientMsgId = pendingClientMsgId || makeClientMsgId();
+    setPendingClientMsgId(clientMsgId);
+    setSendingMsg(true);
+    setActionError("");
+    try {
+      const sent = await sendGroupMessage(activeGroup.id, content, clientMsgId);
+      setMessages((prev) =>
+        prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]
+      );
+      setGroups((prev) =>
+        prev.map((g) => (g.id === activeGroup.id ? { ...g, lastMsg: sent.content } : g))
+      );
+      setMsgInput("");
+      setPendingClientMsgId(null);
+    } catch (err) {
+      setActionError(
+        err.message || "Gửi tin nhắn thất bại — bạn có thể bấm Gửi lại"
+      );
+    } finally {
+      setSendingMsg(false);
+    }
+  };
+
   return (
     <Box>
-      <Box sx={{ display:'flex', justifyContent:'space-between', alignItems:'center', mb:3 }}>
-        <Typography variant="h4" fontWeight={700}>Nhóm & Bạn bè</Typography>
-        <Box sx={{ display:'flex', gap:1 }}>
-          <Button variant="outlined" startIcon={<PersonAddRoundedIcon/>} onClick={()=>setAddFriendOpen(true)} sx={{ borderRadius:'12px', textTransform:'none' }}>Thêm bạn</Button>
-          <Button variant="outlined" startIcon={<ExploreRoundedIcon/>} onClick={()=>setShowDiscover(d=>!d)} sx={{ borderRadius:'12px', textTransform:'none', ...(showDiscover && { bgcolor:'#0F4C81', color:'#fff', borderColor:'#0F4C81', '&:hover':{ bgcolor:'#0D3F6E', borderColor:'#0D3F6E' } }) }}>Khám phá nhóm</Button>
-          <Button variant="contained" startIcon={<AddRoundedIcon/>} onClick={()=>setCreateOpen(true)} sx={{ borderRadius:'12px', bgcolor:'#0F4C81', textTransform:'none' }}>Tạo nhóm</Button>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 1.5,
+          mb: 3,
+        }}
+      >
+        <Box>
+          <Typography variant="h4" fontWeight={700}>
+            Nhóm học
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Tạo nhóm học, tham gia thảo luận và nhắn tin trực tiếp với thành viên
+          </Typography>
         </Box>
+        <Button
+          variant="contained"
+          startIcon={<AddRoundedIcon />}
+          onClick={() => setCreateOpen(true)}
+        >
+          Tạo nhóm mới
+        </Button>
       </Box>
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={3}>
-          <Card sx={{ borderRadius:'16px', border:'1px solid', borderColor:'divider', height:'80vh', display:'flex', flexDirection:'column' }} elevation={0}>
-            <Box sx={{ p:2, borderBottom:'1px solid', borderColor:'divider' }}>
-              <Tabs value={tab} onChange={(_,v)=>{ setTab(v); if(v===0)setActiveId(groups[0]?.id||null); else setActiveId(friends[0]?.id||null); }} sx={{ minHeight:36, mb:1.5, '& .MuiTab-root':{ minHeight:36, fontSize:11, fontWeight:600, textTransform:'none' } }} variant="fullWidth">
-                <Tab label="Nhóm" icon={<GroupsRoundedIcon sx={{ fontSize:15 }}/>} iconPosition="start"/>
-                <Tab label="Bạn bè" icon={<PersonAddRoundedIcon sx={{ fontSize:15 }}/>} iconPosition="start"/>
-              </Tabs>
-              <TextField size="small" fullWidth placeholder="Tìm…" value={search} onChange={e=>setSearch(e.target.value)} InputProps={{ startAdornment:<InputAdornment position="start"><SearchRoundedIcon sx={{ fontSize:16, color:'text.disabled' }}/></InputAdornment> }} sx={{ '& .MuiOutlinedInput-root':{ borderRadius:'10px' } }}/>
-            </Box>
-            <Box sx={{ flex:1, overflow:'auto', py:1 }}>
-              {tab===0 && filteredGroups.map(g=><SidebarItem key={g.id} item={g} isGroup/>)}
-              {tab===1 && filteredFriends.map(f=><SidebarItem key={f.id} item={f} isGroup={false}/>)}
-            </Box>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={9}>
-          {showDiscover ? (
-            <Card sx={{ borderRadius:'16px', border:'1px solid', borderColor:'divider', height:'80vh', display:'flex', flexDirection:'column' }} elevation={0}>
-              <Box sx={{ px:3, py:2, borderBottom:'1px solid', borderColor:'divider', display:'flex', alignItems:'center', gap:2 }}>
-                <ExploreRoundedIcon sx={{ color:'#0F4C81', fontSize:28 }}/>
-                <Typography variant="h6" fontWeight={700}>Khám phá nhóm học</Typography>
-                <TextField size="small" placeholder="Tìm theo tên, môn học…" value={discoverSearch} onChange={e=>setDiscoverSearch(e.target.value)} InputProps={{ startAdornment:<InputAdornment position="start"><SearchRoundedIcon sx={{ fontSize:16, color:'text.disabled' }}/></InputAdornment> }} sx={{ ml:'auto', width:300, '& .MuiOutlinedInput-root':{ borderRadius:'10px' } }}/>
-              </Box>
-              <Box sx={{ flex:1, overflowY:'auto', p:3, bgcolor:'#F8FAFC' }}>
-                <Grid container spacing={2.5}>
-                  {filteredSugg.map(g=><Grid item xs={12} sm={6} lg={4} key={g.id}><SuggestedCard g={g} onJoin={joinGroup}/></Grid>)}
-                  {filteredSugg.length===0 && (
-                    <Grid item xs={12}>
-                      <Box sx={{ textAlign:'center', py:10, color:'text.secondary' }}>
-                        <ExploreRoundedIcon sx={{ fontSize:64, opacity:0.15, mb:2 }}/>
-                        <Typography>Không tìm thấy nhóm phù hợp</Typography>
-                      </Box>
-                    </Grid>
-                  )}
-                </Grid>
-              </Box>
-            </Card>
-          ) : (
-            <ChatArea id={activeId} group={isDM?activeFriend:activeGroup} isDM={isDM} msgs={msgs[activeId]||[]} onSend={send}/>
-          )}
-        </Grid>
-      </Grid>
 
-      <Dialog open={createOpen} onClose={()=>setCreateOpen(false)} maxWidth="sm" fullWidth>
+      {error && (
+        <Alert
+          severity="error"
+          action={<Button size="small" onClick={loadAllGroups}>Thử lại</Button>}
+          sx={{ mb: 2 }}
+        >
+          {error}
+        </Alert>
+      )}
+      {actionError && (
+        <Alert severity="error" onClose={() => setActionError("")} sx={{ mb: 2 }}>
+          {actionError}
+        </Alert>
+      )}
+
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
+        <Tab
+          icon={<PeopleAltRoundedIcon fontSize="small" />}
+          iconPosition="start"
+          label={`Nhóm của tôi (${myGroups.length})`}
+        />
+        <Tab
+          icon={<ExploreRoundedIcon fontSize="small" />}
+          iconPosition="start"
+          label={`Khám phá (${discoverGroups.length})`}
+        />
+      </Tabs>
+
+      {loading ? (
+        <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+          <CircularProgress />
+        </Box>
+      ) : tab === 0 ? (
+        myGroups.length === 0 ? (
+          <Paper sx={{ p: 6, textAlign: "center" }} variant="outlined">
+            <GroupsRoundedIcon sx={{ fontSize: 48, color: "text.disabled", mb: 1 }} />
+            <Typography variant="h6" gutterBottom>
+              Bạn chưa tham gia nhóm học nào
+            </Typography>
+            <Typography variant="body2" color="text.secondary" mb={2}>
+              Hãy tạo nhóm mới hoặc sang tab Khám phá để tham gia cùng bạn bè.
+            </Typography>
+            <Button variant="contained" onClick={() => setTab(1)}>
+              Khám phá nhóm học
+            </Button>
+          </Paper>
+        ) : (
+          <Grid container spacing={2.5}>
+            {/* Danh sách nhóm đã tham gia */}
+            <Grid item xs={12} md={4}>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+                {myGroups.map((g) => (
+                  <Card
+                    key={g.id}
+                    onClick={() => setSelectedGroupId(g.id)}
+                    sx={{
+                      cursor: "pointer",
+                      border: selectedGroupId === g.id ? "2px solid" : "1px solid",
+                      borderColor:
+                        selectedGroupId === g.id ? "primary.main" : "divider",
+                    }}
+                  >
+                    <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                        <Avatar sx={{ bgcolor: g.avatarColor || "#0F4C81" }}>
+                          {initials(g.name)}
+                        </Avatar>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                            <Typography variant="subtitle1" fontWeight={700} noWrap>
+                              {g.name}
+                            </Typography>
+                            {g.privacy === "PRIVATE" ? (
+                              <LockRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+                            ) : (
+                              <PublicRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+                            )}
+                          </Box>
+                          <Typography variant="caption" color="text.secondary" display="block" noWrap>
+                            {g.lastMsg || g.description || "Chưa có tin nhắn nào"}
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
+                        <Chip size="small" label={g.subject || "Chung"} />
+                        <Chip size="small" variant="outlined" label={`${g.memberCount} thành viên`} />
+                        {g.myRole === "OWNER" && (
+                          <Chip size="small" color="primary" label="Chủ nhóm" />
+                        )}
+                      </Box>
+                    </CardContent>
+                  </Card>
+                ))}
+              </Box>
+            </Grid>
+
+            {/* Khung chat nhóm */}
+            <Grid item xs={12} md={8}>
+              {activeGroup && (
+                <Card sx={{ display: "flex", flexDirection: "column", height: 560 }}>
+                  <Box
+                    sx={{
+                      p: 2,
+                      borderBottom: "1px solid",
+                      borderColor: "divider",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 1,
+                    }}
+                  >
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                      <Avatar sx={{ bgcolor: activeGroup.avatarColor || "#0F4C81" }}>
+                        {initials(activeGroup.name)}
+                      </Avatar>
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight={700}>
+                          {activeGroup.name}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {activeGroup.description || activeGroup.subject}
+                        </Typography>
+                      </Box>
+                    </Box>
+                    <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                      <TextField
+                        size="small"
+                        placeholder="Tìm tin nhắn…"
+                        value={msgSearch}
+                        onChange={(e) => setMsgSearch(e.target.value)}
+                        sx={{ width: 170 }}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <SearchRoundedIcon fontSize="small" />
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<PeopleAltRoundedIcon />}
+                        onClick={() => handleOpenMembers(activeGroup.id)}
+                      >
+                        Thành viên ({activeGroup.memberCount})
+                      </Button>
+                      {activeGroup.myRole === "OWNER" ? (
+                        <Tooltip title="Xóa nhóm">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => handleDeleteGroup(activeGroup.id)}
+                          >
+                            <DeleteOutlineRoundedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip title="Rời nhóm">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleLeaveGroup(activeGroup.id)}
+                          >
+                            <ExitToAppRoundedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Box>
+                  </Box>
+
+                  {/* Tin nhắn */}
+                  <Box
+                    onScroll={(e) => {
+                      if (e.currentTarget.scrollTop === 0 && hasMoreOlder && !loadingOlder) {
+                        handleLoadOlder();
+                      }
+                    }}
+                    sx={{ flex: 1, overflowY: "auto", p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}
+                  >
+                    {hasMoreOlder && !messagesLoading && (
+                      <Box sx={{ display: "flex", justifyContent: "center" }}>
+                        <Button size="small" onClick={handleLoadOlder} disabled={loadingOlder}>
+                          {loadingOlder ? "Đang tải…" : "Tải tin nhắn cũ hơn"}
+                        </Button>
+                      </Box>
+                    )}
+                    {messagesLoading ? (
+                      <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+                        <CircularProgress size={24} />
+                      </Box>
+                    ) : messages.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary" textAlign="center" py={6}>
+                        Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện!
+                      </Typography>
+                    ) : (
+                      messages.map((m) => (
+                        <Box
+                          key={m.id}
+                          sx={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: m.mine ? "flex-end" : "flex-start",
+                          }}
+                        >
+                          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.25 }}>
+                            {m.mine ? "Bạn" : m.senderName}
+                          </Typography>
+                          <Paper
+                            sx={{
+                              px: 1.75,
+                              py: 1,
+                              maxWidth: "75%",
+                              bgcolor: m.mine ? "primary.main" : "action.hover",
+                              color: m.mine ? "primary.contrastText" : "text.primary",
+                              borderRadius: 2,
+                            }}
+                          >
+                            <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                              {m.content}
+                            </Typography>
+                          </Paper>
+                        </Box>
+                      ))
+                    )}
+                    <div ref={chatEndRef} />
+                  </Box>
+
+                  <Divider />
+                  <Box
+                    component="form"
+                    onSubmit={handleSendMessage}
+                    sx={{ p: 1.5, display: "flex", gap: 1 }}
+                  >
+                    <TextField
+                      size="small"
+                      fullWidth
+                      placeholder="Nhập tin nhắn cho nhóm…"
+                      value={msgInput}
+                      onChange={(e) => {
+                        setMsgInput(e.target.value);
+                        setPendingClientMsgId(null);
+                      }}
+                      disabled={sendingMsg}
+                    />
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      disabled={sendingMsg || !msgInput.trim()}
+                      endIcon={
+                        sendingMsg ? <CircularProgress size={14} /> : <SendRoundedIcon />
+                      }
+                    >
+                      {pendingClientMsgId ? "Gửi lại" : "Gửi"}
+                    </Button>
+                  </Box>
+                </Card>
+              )}
+            </Grid>
+          </Grid>
+        )
+      ) : (
+        <Box>
+          <TextField
+            size="small"
+            placeholder="Tìm nhóm theo tên, môn học…"
+            value={searchDiscover}
+            onChange={(e) => setSearchDiscover(e.target.value)}
+            sx={{ mb: 3, width: { xs: "100%", sm: 320 } }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchRoundedIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            }}
+          />
+          {discoverGroups.length === 0 ? (
+            <Paper sx={{ p: 6, textAlign: "center" }} variant="outlined">
+              <Typography color="text.secondary">
+                Không có nhóm công khai nào khác để tham gia.
+              </Typography>
+            </Paper>
+          ) : (
+            <Grid container spacing={2.5}>
+              {discoverGroups.map((g) => (
+                <Grid item xs={12} sm={6} md={4} key={g.id}>
+                  <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                    <CardContent sx={{ flex: 1 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.5 }}>
+                        <Avatar sx={{ bgcolor: g.avatarColor || "#0F4C81" }}>
+                          {initials(g.name)}
+                        </Avatar>
+                        <Box>
+                          <Typography variant="subtitle1" fontWeight={700}>
+                            {g.name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {g.subject || "Chung"} · {g.memberCount} thành viên
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary">
+                        {g.description || "Nhóm học tập trên HomuLearn."}
+                      </Typography>
+                    </CardContent>
+                    <Box sx={{ p: 2, pt: 0 }}>
+                      <Button
+                        fullWidth
+                        variant="outlined"
+                        startIcon={<PersonAddRoundedIcon />}
+                        onClick={() => handleJoinGroup(g.id)}
+                      >
+                        Tham gia nhóm
+                      </Button>
+                    </Box>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          )}
+        </Box>
+      )}
+
+      {/* Dialog tạo nhóm mới */}
+      <Dialog open={createOpen} onClose={() => !createSubmitting && setCreateOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle fontWeight={700}>Tạo nhóm học mới</DialogTitle>
-        <DialogContent sx={{ display:'flex', flexDirection:'column', gap:2, pt:'16px !important' }}>
-          <Box sx={{ display:'flex', alignItems:'center', gap:2 }}>
-            <Avatar sx={{ bgcolor:newColor, width:52, height:52 }}><GroupsRoundedIcon/></Avatar>
+        <Box component="form" onSubmit={handleCreateGroup}>
+          <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "8px !important" }}>
+            <TextField
+              label="Tên nhóm"
+              fullWidth
+              required
+              value={createDraft.name}
+              onChange={(e) => setCreateDraft((d) => ({ ...d, name: e.target.value }))}
+              inputProps={{ maxLength: 120 }}
+            />
+            <TextField
+              label="Môn học / Chủ đề"
+              placeholder="VD: Giải tích, CNTT, Tiếng Anh…"
+              fullWidth
+              value={createDraft.subject}
+              onChange={(e) => setCreateDraft((d) => ({ ...d, subject: e.target.value }))}
+              inputProps={{ maxLength: 100 }}
+            />
+            <TextField
+              label="Mô tả nhóm"
+              fullWidth
+              multiline
+              rows={3}
+              value={createDraft.description}
+              onChange={(e) => setCreateDraft((d) => ({ ...d, description: e.target.value }))}
+              inputProps={{ maxLength: 1000 }}
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={createDraft.privacy === "PRIVATE"}
+                  onChange={(e) =>
+                    setCreateDraft((d) => ({
+                      ...d,
+                      privacy: e.target.checked ? "PRIVATE" : "PUBLIC",
+                    }))
+                  }
+                />
+              }
+              label="Nhóm riêng tư (người ngoài không tự tham gia)"
+            />
             <Box>
-              <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>Màu nhóm</Typography>
-              <Box sx={{ display:'flex', gap:1 }}>{AVATAR_COLORS.map(c=><Box key={c} onClick={()=>setNewColor(c)} sx={{ width:22, height:22, borderRadius:'50%', bgcolor:c, cursor:'pointer', border:'2px solid', borderColor:c===newColor?'text.primary':'transparent' }}/>)}</Box>
+              <Typography variant="caption" color="text.secondary" mb={0.75} display="block">
+                Màu đại diện
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1 }}>
+                {AVATAR_COLORS.map((c) => (
+                  <Box
+                    key={c}
+                    onClick={() => setCreateDraft((d) => ({ ...d, avatarColor: c }))}
+                    sx={{
+                      width: 26,
+                      height: 26,
+                      borderRadius: "50%",
+                      bgcolor: c,
+                      cursor: "pointer",
+                      border: "2.5px solid",
+                      borderColor: createDraft.avatarColor === c ? "text.primary" : "transparent",
+                    }}
+                  />
+                ))}
+              </Box>
             </Box>
-          </Box>
-          <TextField label="Tên nhóm *" fullWidth value={newName} onChange={e=>setNewName(e.target.value)} autoFocus/>
-          <TextField label="Mô tả" fullWidth value={newDesc} onChange={e=>setNewDesc(e.target.value)} placeholder="Nhóm này học gì…"/>
-          <TextField label="Môn học" fullWidth value={newSubject} onChange={e=>setNewSubject(e.target.value)} placeholder="Toán, Lý, Python…"/>
-          <FormControlLabel control={<Switch checked={isPrivate} onChange={e=>setIsPrivate(e.target.checked)} color="primary"/>} label={<Box sx={{ display:'flex', alignItems:'center', gap:0.5 }}>{isPrivate?<LockRoundedIcon fontSize="small"/>:<PublicRoundedIcon fontSize="small"/>}<Typography variant="body2">{isPrivate?'Riêng tư':'Công khai'}</Typography></Box>}/>
-        </DialogContent>
-        <DialogActions sx={{ p:2, pt:0 }}>
-          <Button onClick={()=>setCreateOpen(false)}>Huỷ</Button>
-          <Button variant="contained" onClick={createGroup} disabled={!newName.trim()} sx={{ bgcolor:'#0F4C81' }}>Tạo nhóm</Button>
-        </DialogActions>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setCreateOpen(false)} disabled={createSubmitting}>
+              Hủy
+            </Button>
+            <Button type="submit" variant="contained" disabled={createSubmitting || !createDraft.name.trim()}>
+              {createSubmitting ? "Đang tạo…" : "Tạo nhóm"}
+            </Button>
+          </DialogActions>
+        </Box>
       </Dialog>
 
-      <Dialog open={addFriendOpen} onClose={()=>setAddFriendOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle fontWeight={700}>Thêm bạn</DialogTitle>
-        <DialogContent sx={{ display:'flex', flexDirection:'column', gap:2, pt:'16px !important' }}>
-          <TextField label="Tên bạn *" fullWidth value={friendName} onChange={e=>setFriendName(e.target.value)} autoFocus placeholder="Nguyễn Văn A"/>
+      {/* Dialog thành viên */}
+      <Dialog open={membersOpen} onClose={() => setMembersOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle fontWeight={700}>Thành viên nhóm</DialogTitle>
+        <DialogContent>
+          {membersLoading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : (
+            <List disablePadding>
+              {members.map((m) => (
+                <ListItem key={m.id} disableGutters>
+                  <ListItemAvatar>
+                    <Avatar sx={{ bgcolor: m.avatarColor || "primary.main" }}>
+                      {initials(m.fullName)}
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={m.fullName}
+                    secondary={[m.major, m.cohort].filter(Boolean).join(" · ") || "Thành viên"}
+                  />
+                  {m.role === "OWNER" && (
+                    <Chip size="small" color="primary" label="Chủ nhóm" />
+                  )}
+                </ListItem>
+              ))}
+            </List>
+          )}
         </DialogContent>
-        <DialogActions sx={{ p:2, pt:0 }}>
-          <Button onClick={()=>setAddFriendOpen(false)}>Huỷ</Button>
-          <Button variant="contained" onClick={addFriend} disabled={!friendName.trim()} sx={{ bgcolor:'#0F4C81' }}>Thêm</Button>
+        <DialogActions>
+          <Button onClick={() => setMembersOpen(false)}>Đóng</Button>
         </DialogActions>
       </Dialog>
     </Box>

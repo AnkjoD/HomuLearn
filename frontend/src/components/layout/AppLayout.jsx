@@ -1,14 +1,20 @@
-import React from 'react';
-import { Box, Toolbar } from '@mui/material';
-import { useSelector } from 'react-redux';
-import Sidebar from './Sidebar';
-import Topbar from './Topbar';
+import React from "react";
+import { Box, Toolbar } from "@mui/material";
+import { useSelector } from "react-redux";
+import Sidebar from "./Sidebar";
+import Topbar from "./Topbar";
 
 export default function AppLayout({ children }) {
   const sidebarOpen = useSelector((s) => s.ui.sidebarOpen);
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+    <Box
+      sx={{
+        display: "flex",
+        minHeight: "100vh",
+        bgcolor: "background.default",
+      }}
+    >
       <Sidebar open={sidebarOpen} />
       <Topbar />
       <Box
@@ -16,13 +22,24 @@ export default function AppLayout({ children }) {
         sx={{
           flex: 1,
           minWidth: 0,
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        <Toolbar sx={{ minHeight: '64px !important' }} />
-        <Box sx={{ flex: 1, p: 3 }}>{children}</Box>
+        <Toolbar sx={{ minHeight: "76px !important" }} />
+        <Box
+          sx={{
+            flex: 1,
+            p: { xs: 2, md: 4 },
+            maxWidth: 1440,
+            width: "100%",
+            mx: "auto",
+            animation: "pageEnter 300ms ease-out",
+          }}
+        >
+          {children}
+        </Box>
       </Box>
     </Box>
   );

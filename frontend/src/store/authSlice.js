@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { fetchMe, postLogin, postLogout, postRegister } from "../api/authApi";
+import { fetchMe, postLogin, postLogout, postRegister, patchProfile } from "../api/authApi";
 
 // Khôi phục phiên khi reload: gọi GET /api/v1/auth/me
 // Nếu server trả 200 → user đã đăng nhập (JSESSIONID còn hợp lệ)
@@ -41,6 +41,17 @@ export const register = createAsyncThunk(
 export const logout = createAsyncThunk("auth/logout", async () => {
   await postLogout();
 });
+
+export const updateProfile = createAsyncThunk(
+  "auth/updateProfile",
+  async (data, { rejectWithValue }) => {
+    try {
+      return await patchProfile(data);
+    } catch (err) {
+      return rejectWithValue({ message: err.message, fieldErrors: err.fieldErrors });
+    }
+  }
+);
 
 const authSlice = createSlice({
   name: "auth",
@@ -116,6 +127,9 @@ const authSlice = createSlice({
         // Logout thất bại vẫn clear local state; server session có thể đã hết
         state.user = null;
         state.status = "idle";
+      })
+      .addCase(updateProfile.fulfilled, (state, action) => {
+        state.user = action.payload;
       });
   },
 });

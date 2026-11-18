@@ -10,13 +10,16 @@ import {
   createComment,
   updateComment,
   deleteComment,
+  togglePostReaction,
+  togglePostBookmark,
+  reportPost,
 } from "../api/community";
 
 export const loadPosts = createAsyncThunk(
   "community/loadPosts",
-  async ({ page = 0, size = 10 } = {}, { rejectWithValue }) => {
+  async ({ page = 0, size = 10, query = "" } = {}, { rejectWithValue }) => {
     try {
-      return await fetchPosts(page, size);
+      return await fetchPosts(page, size, query);
     } catch (err) {
       return rejectWithValue(err.message || "Không tải được danh sách bài viết");
     }
@@ -125,8 +128,42 @@ export const removeComment = createAsyncThunk(
   }
 );
 
+export const toggleReaction = createAsyncThunk(
+  "community/toggleReaction",
+  async (postId, { rejectWithValue }) => {
+    try {
+      return await togglePostReaction(postId);
+    } catch (err) {
+      return rejectWithValue(err.message || "Không thể thả cảm xúc");
+    }
+  }
+);
+
+export const toggleBookmark = createAsyncThunk(
+  "community/toggleBookmark",
+  async (postId, { rejectWithValue }) => {
+    try {
+      return await togglePostBookmark(postId);
+    } catch (err) {
+      return rejectWithValue(err.message || "Không thể lưu bài viết");
+    }
+  }
+);
+
+export const submitPostReport = createAsyncThunk(
+  "community/submitPostReport",
+  async ({ postId, reason }, { rejectWithValue }) => {
+    try {
+      return await reportPost(postId, reason);
+    } catch (err) {
+      return rejectWithValue(err.message || "Không thể gửi báo cáo");
+    }
+  }
+);
+
 const initialState = {
   posts: [], page: 0, size: 10, totalPages: 0, totalElements: 0,
+  searchQuery: "",
   selectedPost: null, comments: [], commentsPostId: null,
   status: "idle", detailStatus: "idle", commentsStatus: "idle",
   submitting: false, commentSubmitting: false,
@@ -138,6 +175,9 @@ const initialState = {
 const communitySlice = createSlice({
   name: "community", initialState,
   reducers: {
+    setSearchQuery(state, action) {
+      state.searchQuery = action.payload;
+    },
     clearSelectedPost(state) {
       state.selectedPost = null; state.comments = []; state.commentsPostId = null;
       state.detailRequestId = state.commentsRequestId = state.commentMutationRequestId = null;
@@ -155,6 +195,9 @@ const communitySlice = createSlice({
       state.posts = action.payload.content; state.page = action.payload.number;
       state.size = action.payload.size || action.meta.arg?.size || 10;
       state.totalPages = action.payload.totalPages; state.totalElements = action.payload.totalElements;
+      if (action.meta.arg?.query !== undefined) {
+        state.searchQuery = action.meta.arg.query;
+      }
     }).addCase(loadPosts.rejected, (state, action) => {
       if (state.listRequestId !== action.meta.requestId) return;
       state.listRequestId = null; state.status = "failed"; state.error = action.payload;
@@ -186,7 +229,9 @@ const communitySlice = createSlice({
         if (state.mutationRequestId !== action.meta.requestId) return;
         state.mutationRequestId = state.listRequestId = null; state.submitting = false; state.status = "succeeded";
         if (thunk === addPost) {
-          if (state.page === 0) state.posts = [action.payload, ...state.posts].slice(0, state.size);
+          if (state.page === 0 && !state.searchQuery.trim()) {
+            state.posts = [action.payload, ...state.posts].slice(0, state.size);
+          }
           state.totalElements++;
         } else if (thunk === editPost) {
           const i = state.posts.findIndex(p => p.id === action.payload.id);
@@ -234,7 +279,20 @@ const communitySlice = createSlice({
     }
     builder.addCase(login.fulfilled, () => initialState);
     builder.addCase(logout.fulfilled, () => initialState);
+    builder
+      .addCase(toggleReaction.fulfilled, (state, action) => {
+        const { postId, reactionCount, reactedByMe } = action.payload;
+        const apply = (p) => (p?.id === postId ? { ...p, reactionCount, reactedByMe } : p);
+        state.posts = state.posts.map(apply);
+        state.selectedPost = apply(state.selectedPost);
+      })
+      .addCase(toggleBookmark.fulfilled, (state, action) => {
+        const { postId, bookmarkedByMe } = action.payload;
+        const apply = (p) => (p?.id === postId ? { ...p, bookmarkedByMe } : p);
+        state.posts = state.posts.map(apply);
+        state.selectedPost = apply(state.selectedPost);
+      });
   },
 });
-export const { clearSelectedPost, clearError } = communitySlice.actions;
+export const { setSearchQuery, clearSelectedPost, clearError } = communitySlice.actions;
 export default communitySlice.reducer;

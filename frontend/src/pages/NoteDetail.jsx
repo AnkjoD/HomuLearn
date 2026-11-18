@@ -35,6 +35,10 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
 import SmartToyRoundedIcon from "@mui/icons-material/SmartToyRounded";
@@ -42,7 +46,7 @@ import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import SaveRoundedIcon from "@mui/icons-material/SaveRounded";
-import { loadNote, editNote, clearCurrent, clearMutationError } from "../store/notesSlice";
+import { loadNote, loadFolders, editNote, clearCurrent, clearMutationError } from "../store/notesSlice";
 
 // ---------------------------------------------------------------------------
 // AI Chat — mock local, ngoài MVP
@@ -112,7 +116,7 @@ export default function NoteDetail() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  const { current: note, currentStatus, currentError, mutationStatus, mutationError } =
+  const { current: note, folders = [], currentStatus, currentError, mutationStatus, mutationError } =
     useSelector((s) => s.notes);
 
   // AI chat — local state
@@ -128,14 +132,15 @@ export default function NoteDetail() {
 
   // Edit dialog state
   const [editOpen, setEditOpen] = useState(false);
-  const [editDraft, setEditDraft] = useState({ title: "", content: "" });
+  const [editDraft, setEditDraft] = useState({ title: "", content: "", folderId: "" });
   const [editTitleError, setEditTitleError] = useState("");
 
   const isSaving = mutationStatus === "saving";
 
-  // Load note khi mount hoặc id thay đổi
+  // Load note và folders khi mount hoặc id thay đổi
   useEffect(() => {
     dispatch(loadNote(id));
+    dispatch(loadFolders());
     return () => {
       dispatch(clearCurrent());
     };
@@ -157,7 +162,11 @@ export default function NoteDetail() {
   // Mở dialog edit với dữ liệu hiện tại
   const openEdit = () => {
     if (!note) return;
-    setEditDraft({ title: note.title, content: note.content || "" });
+    setEditDraft({
+      title: note.title,
+      content: note.content || "",
+      folderId: note.folderId != null ? String(note.folderId) : "",
+    });
     setEditOpen(true);
   };
 
@@ -174,6 +183,9 @@ export default function NoteDetail() {
         data: {
           title: editDraft.title.trim(),
           content: editDraft.content,
+          ...(editDraft.folderId
+            ? { folderId: Number(editDraft.folderId), clearFolder: false }
+            : { clearFolder: true }),
         },
       })
     );
@@ -242,7 +254,7 @@ export default function NoteDetail() {
     >
       {/* ==================== Nội dung ghi chú ==================== */}
       <Box sx={{ flex: 1, overflowY: "auto", pr: 1 }}>
-        {/* Back + Edit */}
+        {/* Back + Folder + Edit */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
           <Button
             size="small"
@@ -251,6 +263,16 @@ export default function NoteDetail() {
           >
             Danh sách
           </Button>
+          {(() => {
+            const folder = folders.find((f) => f.id === note.folderId);
+            return (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={folder ? `${folder.icon || "📁"} ${folder.name}` : "📄 Ngoài thư mục"}
+              />
+            );
+          })()}
           <Box sx={{ flex: 1 }} />
           <Button
             size="small"
@@ -415,6 +437,23 @@ export default function NoteDetail() {
               setEditDraft((d) => ({ ...d, content: e.target.value }))
             }
           />
+          <FormControl fullWidth size="small">
+            <InputLabel>Thư mục</InputLabel>
+            <Select
+              label="Thư mục"
+              value={editDraft.folderId}
+              onChange={(e) =>
+                setEditDraft((d) => ({ ...d, folderId: e.target.value }))
+              }
+            >
+              <MenuItem value="">📄 Ngoài thư mục (không thuộc thư mục nào)</MenuItem>
+              {folders.map((f) => (
+                <MenuItem key={f.id} value={String(f.id)}>
+                  {f.icon || "📁"} {f.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditOpen(false)} disabled={isSaving}>
